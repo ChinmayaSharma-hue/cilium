@@ -739,6 +739,42 @@ enum {
 	BE_STATE_MAINTENANCE,
 };
 
+struct lb4_reverse_nat {
+	__be32 address;
+	__be16 port;
+} __packed;
+
+struct ipv4_revnat_tuple {
+	__sock_cookie cookie;
+	__be32 address;
+	__be16 port;
+	__u16 pad;
+};
+
+struct ipv4_revnat_entry {
+	__be32 address;
+	__be16 port;
+	__u16 rev_nat_index;
+};
+
+struct lb6_reverse_nat {
+	union v6addr address;
+	__be16 port;
+} __packed;
+
+struct ipv6_revnat_tuple {
+	__sock_cookie cookie;
+	union v6addr address;
+	__be16 port;
+	__u16 pad;
+};
+
+struct ipv6_revnat_entry {
+	union v6addr address;
+	__be16 port;
+	__u16 rev_nat_index;
+};
+
 struct ipv6_ct_tuple {
 	/* Address fields are reversed, i.e.,
 	 * these field names are correct for reply direction traffic.
@@ -770,10 +806,30 @@ struct ipv4_ct_tuple {
 } __packed;
 
 struct ct_entry {
-	__u64 reserved0;	/* unused since v1.16 */
-	__u64 backend_id;
+    __u64 backend_id;
 	__u64 packets;
 	__u64 bytes;
+    union {
+        union {
+            struct lb4_reverse_nat nat_info;
+            struct {
+                __be32 to_saddr;
+                __be16 to_sport;
+            };
+        } ipv4_snat;
+        union {
+            struct lb6_reverse_nat nat_info;
+            struct {
+                union v6addr to_saddr;
+                __be16       to_sport;
+            };
+        } ipv6_snat;
+    } __packed;
+    /* *x_flags_seen represents the OR of all TCP flags seen for the
+     * transmit/receive direction of this entry.
+     */
+    __u8  tx_flags_seen;
+    __u8  rx_flags_seen;
 	__u32 lifetime;
 	__u16 rx_closing:1,
 	      tx_closing:1,
@@ -788,13 +844,7 @@ struct ct_entry {
 	      from_tunnel:1,	/* Connection is over tunnel */
 	      reserved3:5;
 	__u16 rev_nat_index;
-	__u16 reserved4;	/* unused since v1.18 */
 
-	/* *x_flags_seen represents the OR of all TCP flags seen for the
-	 * transmit/receive direction of this entry.
-	 */
-	__u8  tx_flags_seen;
-	__u8  rx_flags_seen;
 
 	__u32 src_sec_id; /* Used from userspace proxies, do not change offset! */
 
@@ -845,24 +895,6 @@ struct lb6_backend {
 
 struct lb6_health {
 	struct lb6_backend peer;
-};
-
-struct lb6_reverse_nat {
-	union v6addr address;
-	__be16 port;
-} __packed;
-
-struct ipv6_revnat_tuple {
-	__sock_cookie cookie;
-	union v6addr address;
-	__be16 port;
-	__u16 pad;
-};
-
-struct ipv6_revnat_entry {
-	union v6addr address;
-	__be16 port;
-	__u16 rev_nat_index;
 };
 
 struct lb4_key {
@@ -925,24 +957,6 @@ struct lb4_backend {
 
 struct lb4_health {
 	struct lb4_backend peer;
-};
-
-struct lb4_reverse_nat {
-	__be32 address;
-	__be16 port;
-} __packed;
-
-struct ipv4_revnat_tuple {
-	__sock_cookie cookie;
-	__be32 address;
-	__be16 port;
-	__u16 pad;
-};
-
-struct ipv4_revnat_entry {
-	__be32 address;
-	__be16 port;
-	__u16 rev_nat_index;
 };
 
 union lb4_affinity_client_id {

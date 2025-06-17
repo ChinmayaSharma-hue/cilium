@@ -61,3 +61,45 @@ func (n *NatEntry6) ToHost() NatEntry {
 }
 
 func (n *NatEntry6) New() bpf.MapValue { return &NatEntry6{} }
+
+// NatCTEntry6 represents an IPv6 NAT entry in the CT table.
+type NatCTEntry6 struct {
+	Addr types.IPv6 `align:"to_saddr"`
+	Port uint16     `align:"to_sport"`
+}
+
+// SizeofNatEntry6 is the size of the NatEntry6 type in bytes.
+const SizeofNatCTEntry6 = int(unsafe.Sizeof(NatCTEntry6{}))
+
+// String returns the readable format.
+func (n *NatCTEntry6) String() string {
+	return fmt.Sprintf("Addr=%s Port=%d Created=%d NeedsCT=%d\n",
+		n.Addr,
+		n.Port,
+	)
+}
+
+// Dump dumps NAT entry to string.
+func (n *NatCTEntry6) Dump(key NatKey, toDeltaSecs func(uint64) string) string {
+	var which string
+
+	if key.GetFlags()&tuple.TUPLE_F_IN != 0 {
+		which = "DST"
+	} else {
+		which = "SRC"
+	}
+	return fmt.Sprintf("XLATE_%s [%s]:%d Created=%s NeedsCT=%d\n",
+		which,
+		n.Addr,
+		n.Port,
+	)
+}
+
+// ToHost converts NatEntry4 ports to host byte order.
+func (n *NatCTEntry6) ToHost() NatEntry {
+	x := *n
+	x.Port = byteorder.NetworkToHost16(n.Port)
+	return &x
+}
+
+func (n *NatCTEntry6) New() bpf.MapValue { return &NatCTEntry6{} }

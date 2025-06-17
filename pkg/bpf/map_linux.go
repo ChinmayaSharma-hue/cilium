@@ -17,6 +17,7 @@ import (
 	"path"
 	"reflect"
 	"strings"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"golang.org/x/sys/unix"
@@ -1037,6 +1038,8 @@ func (bi *BatchIterator[KT, VT, KP, VP]) IterateAll(ctx context.Context, opts ..
 		retry:
 			for retry := range bi.maxBatchedRetries() {
 				// Attempt to read batch into buffer.
+				size := unsafe.Sizeof(bi.vals[0])
+				fmt.Printf("batch size: %d\n", size)
 				c, batchErr := bi.m.BatchLookup(&cursor, bi.keys, bi.vals, nil)
 				bi.batchSize = c
 

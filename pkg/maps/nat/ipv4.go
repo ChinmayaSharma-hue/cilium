@@ -57,3 +57,41 @@ func (n *NatEntry4) ToHost() NatEntry {
 }
 
 func (n *NatEntry4) New() bpf.MapValue { return &NatEntry4{} }
+
+// NATCTEntry4 represents an IPv4 NAT entry in the CT table.
+type NATCTEntry4 struct {
+	Addr types.IPv4 `align:"to_saddr"`
+	Port uint16     `align:"to_sport"`
+}
+
+// String returns the readable format.
+func (n *NATCTEntry4) String() string {
+	return fmt.Sprintf("Addr=%s Port=%d\n",
+		n.Addr,
+		n.Port)
+}
+
+// Dump dumps NAT entry to string.
+func (n *NATCTEntry4) Dump(key NatKey, toDeltaSecs func(uint64) string) string {
+	var which string
+
+	if key.GetFlags()&tuple.TUPLE_F_IN != 0 {
+		which = "DST"
+	} else {
+		which = "SRC"
+	}
+	return fmt.Sprintf("XLATE_%s %s:%d\n",
+		which,
+		n.Addr,
+		n.Port,
+	)
+}
+
+// ToHost converts NatEntry4 ports to host byte order.
+func (n *NATCTEntry4) ToHost() NatEntry {
+	x := *n
+	x.Port = byteorder.NetworkToHost16(n.Port)
+	return &x
+}
+
+func (n *NATCTEntry4) New() bpf.MapValue { return &NATCTEntry4{} }
