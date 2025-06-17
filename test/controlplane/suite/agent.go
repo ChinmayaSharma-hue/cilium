@@ -19,14 +19,15 @@ import (
 	fakecni "github.com/cilium/cilium/daemon/cmd/cni/fake"
 	fakeDatapath "github.com/cilium/cilium/pkg/datapath/fake"
 	fakeTypes "github.com/cilium/cilium/pkg/datapath/fake/types"
+	"github.com/cilium/cilium/pkg/datapath/neighbor"
 	"github.com/cilium/cilium/pkg/datapath/prefilter"
 	datapathTables "github.com/cilium/cilium/pkg/datapath/tables"
-	"github.com/cilium/cilium/pkg/fqdn/defaultdns"
-	fqdnproxy "github.com/cilium/cilium/pkg/fqdn/proxy"
+	"github.com/cilium/cilium/pkg/dial"
 	"github.com/cilium/cilium/pkg/hive"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
 	k8sClient "github.com/cilium/cilium/pkg/k8s/client"
 	k8sSynced "github.com/cilium/cilium/pkg/k8s/synced"
+	"github.com/cilium/cilium/pkg/kvstore"
 	"github.com/cilium/cilium/pkg/kvstore/store"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/maps/ctmap"
@@ -35,18 +36,15 @@ import (
 	monitorAgent "github.com/cilium/cilium/pkg/monitor/agent"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/promise"
-	"github.com/cilium/cilium/pkg/testutils/mockmaps"
 )
 
 type agentHandle struct {
-	t            *testing.T
-	db           *statedb.DB
-	nodeAddrs    statedb.Table[datapathTables.NodeAddress]
-	d            *cmd.Daemon
-	p            promise.Promise[*cmd.Daemon]
-	fnh          *fakeTypes.FakeNodeHandler
-	flbMap       *mockmaps.LBMockMap
-	defaultProxy defaultdns.Proxy
+	t         *testing.T
+	db        *statedb.DB
+	nodeAddrs statedb.Table[datapathTables.NodeAddress]
+	d         *cmd.Daemon
+	p         promise.Promise[*cmd.Daemon]
+	fnh       *fakeTypes.FakeNodeHandler
 
 	hive *hive.Hive
 	log  *slog.Logger
@@ -83,19 +81,22 @@ func (h *agentHandle) setupCiliumAgentHive(clientset k8sClient.Clientset, extraC
 			func() ctmap.GCRunner { return ctmap.NewFakeGCRunner() },
 			func() policymap.Factory { return nil },
 			func() *server.Server { return nil },
+			func() *loadbalancer.TestConfig { return &loadbalancer.TestConfig{} },
 			k8sSynced.RejectedCRDSyncPromise,
 		),
+		kvstore.Cell(kvstore.DisabledBackendName),
 		fakeDatapath.Cell,
+		neighbor.ForwardableIPCell,
+		cell.Provide(neighbor.NewCommonTestConfig(true, false)),
 		prefilter.Cell,
 		monitorAgent.Cell,
 		metrics.Cell,
 		store.Cell,
+		dial.ServiceResolverCell,
 		cmd.ControlPlane,
-		defaultdns.Cell,
-		cell.Invoke(func(p promise.Promise[*cmd.Daemon], nh *fakeTypes.FakeNodeHandler, lbMap *mockmaps.LBMockMap) {
+		cell.Invoke(func(p promise.Promise[*cmd.Daemon], nh *fakeTypes.FakeNodeHandler) {
 			h.p = p
 			h.fnh = nh
-			h.flbMap = lbMap
 		}),
 
 		cell.Invoke(func(db *statedb.DB, nodeAddrs statedb.Table[datapathTables.NodeAddress]) {
@@ -106,13 +107,6 @@ func (h *agentHandle) setupCiliumAgentHive(clientset k8sClient.Clientset, extraC
 
 	hive.AddConfigOverride(h.hive, func(c *datapathTables.DirectRoutingDeviceConfig) {
 		c.DirectRoutingDevice = "test0"
-	})
-
-	// Disable the experimental LB control-plane. The tests here use the "LBMockMap" which is not used
-	// by the new implementation. Once we switch implementations we can remove the LB related tests from
-	// here as they're already covered by the LB test suite.
-	hive.AddConfigOverride(h.hive, func(c *loadbalancer.UserConfig) {
-		c.EnableExperimentalLB = false
 	})
 }
 
@@ -133,7 +127,6 @@ func (h *agentHandle) populateCiliumAgentOptions(testDir string, modConfig func(
 	option.Config.Opts.SetBool(option.Debug, true)
 	option.Config.EnableIPSec = false
 	option.Config.EnableIPv6 = false
-	option.Config.KubeProxyReplacement = option.KubeProxyReplacementTrue
 	option.Config.K8sRequireIPv6PodCIDR = false
 	option.Config.EnableL7Proxy = false
 	option.Config.Debug = true
@@ -146,9 +139,6 @@ func (h *agentHandle) populateCiliumAgentOptions(testDir string, modConfig func(
 	// object bound to the test hive.
 	h.hive.Viper().Set(option.EndpointGCInterval, 0)
 
-	if option.Config.EnableL7Proxy {
-		h.defaultProxy.Set(fqdnproxy.MockFQDNProxy{})
-	}
 }
 
 func (h *agentHandle) startCiliumAgent() (*cmd.Daemon, error) {

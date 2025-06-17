@@ -19,9 +19,10 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/cilium/cilium/pkg/hive"
-	"github.com/cilium/cilium/pkg/k8s/client"
+	k8sClient "github.com/cilium/cilium/pkg/k8s/client/testutils"
 	"github.com/cilium/cilium/pkg/k8s/testutils"
 	"github.com/cilium/cilium/pkg/k8s/version"
+	nodeTypes "github.com/cilium/cilium/pkg/node/types"
 	"github.com/cilium/cilium/pkg/time"
 )
 
@@ -31,10 +32,12 @@ func TestScript(t *testing.T) {
 	// Catch any leaked goroutines.
 	t.Cleanup(func() { goleak.VerifyNone(t) })
 
+	nodeTypes.SetName("testnode")
+
 	version.Force(testutils.DefaultVersion)
 	setup := func(t testing.TB, args []string) *script.Engine {
 		h := hive.New(
-			client.FakeClientCell,
+			k8sClient.FakeClientCell(),
 			Cell,
 		)
 

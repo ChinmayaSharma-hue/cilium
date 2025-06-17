@@ -1,10 +1,7 @@
-#! --enable-experimental-lb
+#! 
 
 # Start the test application
 hive start
-
-# Wait for tables to initialize (e.g. reflector to start) before adding more objects.
-db/initialized
 
 # Create a LoadBalancer service with Local traffic policies and associate two backends 
 # to it, one of them on this node ("testnode") and one on another node.

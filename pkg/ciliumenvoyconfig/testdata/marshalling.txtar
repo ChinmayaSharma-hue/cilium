@@ -2,7 +2,6 @@
 
 # Start the hive and wait for tables to be synchronized before adding k8s objects.
 hive start
-db/initialized
 
 # Add the objects and wait for it to be ingested.
 k8s/add service.yaml endpointslice.yaml cec.yaml
@@ -78,6 +77,8 @@ kind: CiliumEnvoyConfig
 metadata:
   name: envoy-lb-listener
   namespace: test
+  labels:
+    foo: bar
 spec:
   services:
     - name: echo
@@ -113,6 +114,9 @@ spec:
         "name": "envoy-lb-listener"
       }
     ]
+  },
+  "Labels": {
+    "foo": "bar"
   },
   "SelectsLocalNode": true,
   "Listeners": [

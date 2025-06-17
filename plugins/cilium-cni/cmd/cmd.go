@@ -451,7 +451,10 @@ func setupLogging(n *types.NetConf) error {
 	}
 
 	if len(n.LogFile) != 0 {
-		logging.AddHooks(hooks.NewFileRotationLogHook(n.LogFile,
+		logging.AddHandlers(hooks.NewFileRotationLogHook(
+			// slogloggercheck: the logger has been initialized with default settings
+			logging.GetSlogLevel(logging.DefaultSlogLogger),
+			n.LogFile,
 			hooks.EnableCompression(),
 			hooks.WithMaxBackups(defaultLogMaxBackups),
 		))

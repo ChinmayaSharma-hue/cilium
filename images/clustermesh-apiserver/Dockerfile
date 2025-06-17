@@ -10,10 +10,10 @@ ARG BASE_IMAGE=gcr.io/distroless/static:nonroot@sha256:188ddfb9e497f861177352057
 #    chain attacks where an attacker has write access to our 3rd party dependency image registries.
 # 2. These digests must be to the *overall* digest, not the digest for a specific image. This is because the images will
 #    be architecture specific, but the overall digest will contain all of the architectures.
-ARG GOLANG_IMAGE=docker.io/library/golang:1.24.3@sha256:86b4cff66e04d41821a17cea30c1031ed53e2635e2be99ae0b4a7d69336b5063
+ARG GOLANG_IMAGE=docker.io/library/golang:1.24.4@sha256:10c131810f80a4802c49cab0961bbe18a16f4bb2fb99ef16deaa23e4246fc817
 # We don't use ETCD_IMAGE because that's used in Makefile.defs to select a ETCD image approrpate for the *host platform*
 # to run tests with.
-ARG ETCD_SERVER_IMAGE=gcr.io/etcd-development/etcd:v3.6.0@sha256:2ebe4d4c6ad0458592d16806eb1711c4d30804e0f22b20cc5fbc24c19a8592e0
+ARG ETCD_SERVER_IMAGE=gcr.io/etcd-development/etcd:v3.6.1@sha256:56bc6ef112a4e2702142d365baecae44cba85c6efc6146b4a41a4c655dd7d231
 
 # BUILDPLATFORM is an automatic platform ARG enabled by Docker BuildKit.
 # Represents the plataform where the build is happening, do not mix with
@@ -27,14 +27,14 @@ ARG TARGETARCH
 # MODIFIERS are extra arguments to be passed to make at build time.
 ARG MODIFIERS
 
-WORKDIR /go/src/github.com/cilium/cilium/clustermesh-apiserver
+WORKDIR /go/src/github.com/cilium/cilium
 RUN --mount=type=bind,readwrite,target=/go/src/github.com/cilium/cilium \
-    mkdir -p /out/${TARGETOS}/${TARGETARCH} && cp etcd-config.yaml /out/${TARGETOS}/${TARGETARCH}/etcd-config.yaml
+    mkdir -p /out/${TARGETOS}/${TARGETARCH} && cp clustermesh-apiserver/etcd-config.yaml /out/${TARGETOS}/${TARGETARCH}/etcd-config.yaml
 RUN --mount=type=bind,readwrite,target=/go/src/github.com/cilium/cilium \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg \
-    make GOARCH=${TARGETARCH} $(echo $MODIFIERS | tr -d '"') \
-    && mkdir -p /out/${TARGETOS}/${TARGETARCH}/usr/bin && mv clustermesh-apiserver /out/${TARGETOS}/${TARGETARCH}/usr/bin
+    make GOARCH=${TARGETARCH} DESTDIR=/out/${TARGETOS}/${TARGETARCH} $(echo $MODIFIERS | tr -d '"') \
+    build-container-clustermesh-apiserver install-container-binary-clustermesh-apiserver
 
 WORKDIR /go/src/github.com/cilium/cilium
 # licenses-all is a "script" that executes "go run" so its ARCH should be set

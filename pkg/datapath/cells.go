@@ -27,19 +27,16 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/linux/sysctl"
 	"github.com/cilium/cilium/pkg/datapath/linux/utime"
 	"github.com/cilium/cilium/pkg/datapath/loader"
+	"github.com/cilium/cilium/pkg/datapath/neighbor"
 	"github.com/cilium/cilium/pkg/datapath/node"
 	"github.com/cilium/cilium/pkg/datapath/orchestrator"
 	"github.com/cilium/cilium/pkg/datapath/prefilter"
 	"github.com/cilium/cilium/pkg/datapath/tables"
 	"github.com/cilium/cilium/pkg/datapath/tunnel"
-	"github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/datapath/xdp"
-	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/logging"
-	"github.com/cilium/cilium/pkg/maglev"
 	"github.com/cilium/cilium/pkg/maps"
 	"github.com/cilium/cilium/pkg/maps/eventsmap"
-	"github.com/cilium/cilium/pkg/maps/lbmap"
 	monitorAgent "github.com/cilium/cilium/pkg/monitor/agent"
 	"github.com/cilium/cilium/pkg/mtu"
 	"github.com/cilium/cilium/pkg/option"
@@ -77,14 +74,6 @@ var Cell = cell.Module(
 	cell.Invoke(initDatapath),
 
 	cell.Provide(newWireguardAgent),
-
-	cell.Provide(func(lbConfig loadbalancer.Config, maglev *maglev.Maglev, logger *slog.Logger) types.LBMap {
-		if lbConfig.EnableExperimentalLB {
-			// The experimental control-plane comes with its own LBMap implementation.
-			return nil
-		}
-		return lbmap.New(logger, lbConfig, maglev)
-	}),
 
 	// Provides the Table[NodeAddress] and the controller that populates it from Table[*Device]
 	tables.NodeAddressCell,
@@ -155,6 +144,11 @@ var Cell = cell.Module(
 
 	// Provides a cache of link names to ifindex mappings
 	link.Cell,
+
+	// Neighbor cell provides the ability for other components to request an IP be
+	// "forwardable". The neighbor subsystem converts these IPs into neighbor entries
+	// in the kernel and ensures they are kept up to date.
+	neighbor.Cell,
 )
 
 func newWireguardAgent(rootLogger *slog.Logger, lc cell.Lifecycle, sysctl sysctl.Sysctl, health cell.Health, registry job.Registry, db *statedb.DB, mtuTable statedb.Table[mtu.RouteMTU]) *wg.Agent {
@@ -165,8 +159,7 @@ func newWireguardAgent(rootLogger *slog.Logger, lc cell.Lifecycle, sysctl sysctl
 				option.EnableWireguard, option.EnableIPSecName))
 		}
 
-		jobGroup := registry.NewGroup(health)
-		lc.Append(jobGroup)
+		jobGroup := registry.NewGroup(health, lc)
 
 		var err error
 		privateKeyPath := filepath.Join(option.Config.StateDir, wgTypes.PrivKeyFilename)

@@ -16,6 +16,7 @@ import (
 	datapath "github.com/cilium/cilium/pkg/datapath/types"
 	"github.com/cilium/cilium/pkg/datapath/xdp"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
+	"github.com/cilium/cilium/pkg/kpr"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/maglev"
 	"github.com/cilium/cilium/pkg/mtu"
@@ -48,6 +49,7 @@ func newLocalNodeConfig(
 	masqInterface string,
 	xdpConfig xdp.Config,
 	lbConfig loadbalancer.Config,
+	kprCfg kpr.KPRConfig,
 	maglevConfig maglev.Config,
 	mtuTbl statedb.Table[mtu.RouteMTU],
 ) (datapath.LocalNodeConfiguration, <-chan struct{}, error) {
@@ -85,7 +87,7 @@ func newLocalNodeConfig(
 		AllocCIDRIPv6:                localNode.IPv6AllocCIDR,
 		NativeRoutingCIDRIPv4:        datapath.RemoteSNATDstAddrExclusionCIDRv4(localNode),
 		NativeRoutingCIDRIPv6:        datapath.RemoteSNATDstAddrExclusionCIDRv6(localNode),
-		LoopbackIPv4:                 node.GetIPv4Loopback(logger),
+		ServiceLoopbackIPv4:          node.GetServiceLoopbackIPv4(logger),
 		Devices:                      nativeDevices,
 		NodeAddresses:                statedb.Collect(nodeAddrsIter),
 		DirectRoutingDevice:          directRoutingDevice,
@@ -108,6 +110,7 @@ func newLocalNodeConfig(
 		IPv6PodSubnets:               cidr.NewCIDRSlice(config.IPv6PodSubnets),
 		XDPConfig:                    xdpConfig,
 		LBConfig:                     lbConfig,
+		KPRConfig:                    kprCfg,
 		MaglevConfig:                 maglevConfig,
 	}, common.MergeChannels(devsWatch, addrsWatch, directRoutingDevWatch, mtuWatch), nil
 }

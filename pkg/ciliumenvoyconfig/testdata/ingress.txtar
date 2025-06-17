@@ -1,4 +1,4 @@
-#! --enable-experimental-lb --lb-test-fault-probability=0.0
+#! --lb-test-fault-probability=0.0
 # Test the CiliumEnvoyConfig handling for the ingress service created by the operator.
 # This validates that we process the service even though it has no endpoints associated
 # to it.
@@ -6,7 +6,6 @@
 # dumped using e.g. "kubectl get svc/details -o yaml".
 
 hive/start
-db/initialized
 
 # Add the objects
 k8s/add svc-ingress.yaml eps-ingress.yaml cec.yaml

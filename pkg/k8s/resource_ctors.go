@@ -61,6 +61,7 @@ const (
 // Flags implements the cell.Flagger interface.
 func (def Config) Flags(flags *pflag.FlagSet) {
 	flags.Bool("enable-k8s-endpoint-slice", def.EnableK8sEndpointSlice, "Enables k8s EndpointSlice feature in Cilium if the k8s cluster supports it")
+	flags.MarkDeprecated("enable-k8s-endpoint-slice", "The flag will be removed in v1.19. The feature will be unconditionally enabled by default.")
 	flags.String("k8s-service-proxy-name", def.K8sServiceProxyName, "Value of K8s service-proxy-name label for which Cilium handles the services (empty = all services without service.kubernetes.io/service-proxy-name label)")
 }
 
@@ -298,6 +299,10 @@ func CiliumBGPPeerConfigResource(params CiliumResourceParams, opts ...func(*meta
 }
 
 func EndpointsResource(logger *slog.Logger, lc cell.Lifecycle, cfg Config, cs client.Clientset, opts ...func(*metav1.ListOptions)) (resource.Resource[*Endpoints], error) {
+	return EndpointsResourceWithIndexers(logger, lc, cfg, cs, nil, opts...)
+}
+
+func EndpointsResourceWithIndexers(logger *slog.Logger, lc cell.Lifecycle, cfg Config, cs client.Clientset, indexers cache.Indexers, opts ...func(*metav1.ListOptions)) (resource.Resource[*Endpoints], error) {
 	if !cs.IsEnabled() {
 		return nil, nil
 	}
@@ -318,6 +323,7 @@ func EndpointsResource(logger *slog.Logger, lc cell.Lifecycle, cfg Config, cs cl
 		endpointsOptsModifiers:      append(opts, endpointsOptsModifier),
 		endpointSlicesOptsModifiers: append(opts, endpointSliceOptsModifier),
 	}
+
 	return resource.New[*Endpoints](
 		lc,
 		lw,
@@ -326,6 +332,7 @@ func EndpointsResource(logger *slog.Logger, lc cell.Lifecycle, cfg Config, cs cl
 		}),
 		resource.WithMetric("Endpoint"),
 		resource.WithName("endpoints"),
+		resource.WithIndexers(indexers),
 	), nil
 }
 
@@ -491,26 +498,4 @@ func ciliumEndpointSliceLocalPodIndexFunc(logger *slog.Logger, obj any) ([]strin
 		}
 	}
 	return indices, nil
-}
-
-func CiliumEnvoyConfigResource(params CiliumResourceParams, opts ...func(*metav1.ListOptions)) (resource.Resource[*cilium_api_v2.CiliumEnvoyConfig], error) {
-	if !params.ClientSet.IsEnabled() {
-		return nil, nil
-	}
-	lw := utils.ListerWatcherWithModifiers(
-		utils.ListerWatcherFromTyped[*cilium_api_v2.CiliumEnvoyConfigList](params.ClientSet.CiliumV2().CiliumEnvoyConfigs("")),
-		opts...,
-	)
-	return resource.New[*cilium_api_v2.CiliumEnvoyConfig](params.Lifecycle, lw, resource.WithMetric("CiliumEnvoyConfig"), resource.WithCRDSync(params.CRDSyncPromise)), nil
-}
-
-func CiliumClusterwideEnvoyConfigResource(params CiliumResourceParams, opts ...func(*metav1.ListOptions)) (resource.Resource[*cilium_api_v2.CiliumClusterwideEnvoyConfig], error) {
-	if !params.ClientSet.IsEnabled() {
-		return nil, nil
-	}
-	lw := utils.ListerWatcherWithModifiers(
-		utils.ListerWatcherFromTyped[*cilium_api_v2.CiliumClusterwideEnvoyConfigList](params.ClientSet.CiliumV2().CiliumClusterwideEnvoyConfigs()),
-		opts...,
-	)
-	return resource.New[*cilium_api_v2.CiliumClusterwideEnvoyConfig](params.Lifecycle, lw, resource.WithMetric("CiliumClusterwideEnvoyConfig"), resource.WithCRDSync(params.CRDSyncPromise)), nil
 }

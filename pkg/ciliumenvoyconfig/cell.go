@@ -10,7 +10,7 @@ import (
 	"github.com/cilium/cilium/pkg/envoy"
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/metrics/metric"
-	"github.com/cilium/cilium/pkg/proxy"
+	"github.com/cilium/cilium/pkg/proxy/proxyports"
 )
 
 var (
@@ -39,17 +39,22 @@ var (
 	)
 
 	controllerCells = cell.Group(
-		cell.Invoke(registerCECController),
+		cell.Invoke(
+			registerCECController,
+			registerRegenerationWait,
+		),
 		metrics.Metric(newMetrics),
 	)
 
 	tableCells = cell.Group(
 		cell.ProvidePrivate(
 			NewCECTable,
-			statedb.RWTable[*CEC].ToTable,
 			NewEnvoyResourcesTable,
 			newNodeLabels,
 			cecListerWatchers,
+		),
+		cell.Provide(
+			statedb.RWTable[*CEC].ToTable,
 		),
 		cell.Invoke(
 			registerCECK8sReflector,
@@ -58,7 +63,7 @@ var (
 	)
 )
 
-func newPortAllocator(proxy *proxy.Proxy) PortAllocator {
+func newPortAllocator(proxy *proxyports.ProxyPorts) PortAllocator {
 	return proxy
 }
 

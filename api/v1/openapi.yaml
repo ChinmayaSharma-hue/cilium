@@ -649,20 +649,6 @@ paths:
             type: array
             items:
               "$ref": "#/definitions/Service"
-  "/service/{id}":
-    get:
-      summary: Retrieve configuration of a service
-      tags:
-      - service
-      parameters:
-      - "$ref": "#/parameters/service-id"
-      responses:
-        '200':
-          description: Success
-          schema:
-            "$ref": "#/definitions/Service"
-        '404':
-          description: Service not found
 
   "/recorder":
     get:
@@ -2000,6 +1986,9 @@ definitions:
       hubble:
         description: Status of Hubble server
         "$ref": "#/definitions/HubbleStatus"
+      hubble-metrics:
+        description: Status of Hubble metrics server
+        "$ref": "#/definitions/HubbleMetricsStatus"
       kubernetes:
         description: Status of Kubernetes integration
         "$ref": "#/definitions/K8sStatus"
@@ -2148,18 +2137,24 @@ definitions:
             type: string
             format: duration
             description: Uptime of this Hubble observer instance
-      metrics:
-        type: object
-        description: Status of the Hubble metrics server
-        properties:
-          state:
-            type: string
-            description: State of the Hubble metrics
-            enum:
-              - Ok
-              - Warning
-              - Failure
-              - Disabled
+  HubbleMetricsStatus:
+    description: |-
+      Status of the Hubble metrics server
+
+      +k8s:deepcopy-gen=true
+    type: object
+    properties:
+      state:
+        type: string
+        description: State the component is in
+        enum:
+          - Ok
+          - Warning
+          - Failure
+          - Disabled
+      msg:
+        type: string
+        description: Human readable status/error/warning message
   K8sStatus:
     description: |-
       Status of Kubernetes integration

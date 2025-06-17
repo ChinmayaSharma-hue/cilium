@@ -69,8 +69,8 @@ var (
 			if ip == localIP {
 				return &testutils.FakeEndpointInfo{
 					ID: uint64(localEP),
-					PolicyMap: map[policyTypes.Key]string{
-						remotePolicyKey: fooBarLabel.String(),
+					PolicyMap: map[policyTypes.Key]labels.LabelArrayListString{
+						remotePolicyKey: fooBarLabel.ArrayListString(),
 					},
 					PolicyRevision: 1,
 				}, true
@@ -500,8 +500,8 @@ func TestDecodePolicyVerdictNotify(t *testing.T) {
 		PodName:      "xwing",
 		PodNamespace: "default",
 		Labels:       []string{"a", "b", "c"},
-		PolicyMap: map[policyTypes.Key]string{
-			policyKey: labels.LabelArrayList{policyLabel}.String(),
+		PolicyMap: map[policyTypes.Key]labels.LabelArrayListString{
+			policyKey: labels.LabelArrayList{policyLabel}.ArrayListString(),
 		},
 		PolicyRevision: 1,
 	}
@@ -629,8 +629,8 @@ func TestNetworkPolicyCorrelationDisabled(t *testing.T) {
 		PodName:      "xwing",
 		PodNamespace: "default",
 		Labels:       []string{"a", "b", "c"},
-		PolicyMap: map[policyTypes.Key]string{
-			policyKey: labels.LabelArrayList{policyLabel}.String(),
+		PolicyMap: map[policyTypes.Key]labels.LabelArrayListString{
+			policyKey: labels.LabelArrayList{policyLabel}.ArrayListString(),
 		},
 		PolicyRevision: 1,
 	}
@@ -872,8 +872,8 @@ func TestDecodeTrafficDirection(t *testing.T) {
 			if ip == localIP {
 				return &testutils.FakeEndpointInfo{
 					ID: uint64(localEP),
-					PolicyMap: map[policyTypes.Key]string{
-						policyKey: policyLabel.String(),
+					PolicyMap: map[policyTypes.Key]labels.LabelArrayListString{
+						policyKey: policyLabel.ArrayListString(),
 					},
 					PolicyRevision: 1,
 				}, true
@@ -1059,13 +1059,13 @@ func TestDecodeTrafficDirection(t *testing.T) {
 
 	ep, ok := endpointGetter.GetEndpointInfo(localIP)
 	assert.True(t, ok)
-	strLbls, rev, ok := ep.GetRealizedPolicyRuleLabelsForKey(
+	info, ok := ep.GetPolicyCorrelationInfoForKey(
 		policy.KeyForDirection(directionFromProto(f.GetTrafficDirection())).
 			WithIdentity(identity.NumericIdentity(f.GetDestination().GetIdentity())))
 	assert.True(t, ok)
-	lbls := labels.LabelArrayListFromString(strLbls)
+	lbls := labels.LabelArrayListFromString(info.RuleLabels)
 	assert.Equal(t, lbls, policyLabel)
-	assert.Equal(t, uint64(1), rev)
+	assert.Equal(t, uint64(1), info.Revision)
 
 	// PolicyVerdictNotify Ingress
 	pvn = monitor.PolicyVerdictNotify{

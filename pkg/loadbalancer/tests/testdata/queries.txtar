@@ -1,11 +1,10 @@
-#! --enable-experimental-lb 
+#! 
 #
 # This tests different queries that can be made against the load-balancing tables.
 #
 
 # Start and wait for sync against the k8s fake client.
 hive start
-db/initialized
 
 # Show the registered tables and indexes
 db

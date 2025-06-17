@@ -107,12 +107,13 @@ func newClusterMesh(lc cell.Lifecycle, params clusterMeshParams) (*clusterMesh, 
 		syncTimeoutConfig: params.TimeoutConfig,
 	}
 	cm.common = common.NewClusterMesh(common.Configuration{
-		Logger:           params.Logger,
-		Config:           params.Config,
-		ClusterInfo:      params.ClusterInfo,
-		NewRemoteCluster: cm.newRemoteCluster,
-		ServiceResolver:  params.ServiceResolver,
-		Metrics:          params.CommonMetrics,
+		Logger:              params.Logger,
+		Config:              params.Config,
+		ClusterInfo:         params.ClusterInfo,
+		RemoteClientFactory: params.RemoteClientFactory,
+		NewRemoteCluster:    cm.newRemoteCluster,
+		ServiceResolver:     params.ServiceResolver,
+		Metrics:             params.CommonMetrics,
 	})
 
 	lc.Append(cm.common)
@@ -184,7 +185,7 @@ func (cm *clusterMesh) GlobalServiceExports() *GlobalServiceExportCache {
 
 func (cm *clusterMesh) newRemoteCluster(name string, status common.StatusFunc) common.RemoteCluster {
 	rc := &remoteCluster{
-		logger:                        cm.logger,
+		logger:                        cm.logger.With(logfields.ClusterName, name),
 		name:                          name,
 		clusterMeshEnableEndpointSync: cm.cfg.ClusterMeshEnableEndpointSync,
 		clusterMeshEnableMCSAPI:       cm.cfgMCSAPI.ClusterMeshEnableMCSAPI,
@@ -202,7 +203,7 @@ func (cm *clusterMesh) newRemoteCluster(name string, status common.StatusFunc) c
 			serviceStore.NamespacedNameValidator(),
 		),
 		common.NewSharedServicesObserver(
-			cm.logger.With(logfields.ClusterName, name),
+			rc.logger,
 			cm.globalServices,
 			func(svc *serviceStore.ClusterService) {
 				for _, hook := range cm.clusterServiceUpdateHooks {

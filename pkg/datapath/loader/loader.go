@@ -21,7 +21,6 @@ import (
 	"go4.org/netipx"
 
 	"github.com/cilium/cilium/pkg/bpf"
-	"github.com/cilium/cilium/pkg/byteorder"
 	"github.com/cilium/cilium/pkg/datapath/config"
 	"github.com/cilium/cilium/pkg/datapath/linux/linux_defaults"
 	"github.com/cilium/cilium/pkg/datapath/linux/route"
@@ -37,6 +36,7 @@ import (
 	"github.com/cilium/cilium/pkg/mac"
 	"github.com/cilium/cilium/pkg/maps/callsmap"
 	"github.com/cilium/cilium/pkg/maps/policymap"
+	"github.com/cilium/cilium/pkg/node/manager"
 	"github.com/cilium/cilium/pkg/option"
 )
 
@@ -78,22 +78,22 @@ type loader struct {
 	hostDpInitializedOnce sync.Once
 	hostDpInitialized     chan struct{}
 
-	sysctl          sysctl.Sysctl
-	prefilter       datapath.PreFilter
-	compilationLock datapath.CompilationLock
-	configWriter    datapath.ConfigWriter
-	nodeHandler     datapath.NodeHandler
+	sysctl             sysctl.Sysctl
+	prefilter          datapath.PreFilter
+	compilationLock    datapath.CompilationLock
+	configWriter       datapath.ConfigWriter
+	nodeConfigNotifier *manager.NodeConfigNotifier
 }
 
 type Params struct {
 	cell.In
 
-	Logger          *slog.Logger
-	Sysctl          sysctl.Sysctl
-	Prefilter       datapath.PreFilter
-	CompilationLock datapath.CompilationLock
-	ConfigWriter    datapath.ConfigWriter
-	NodeHandler     datapath.NodeHandler
+	Logger             *slog.Logger
+	Sysctl             sysctl.Sysctl
+	Prefilter          datapath.PreFilter
+	CompilationLock    datapath.CompilationLock
+	ConfigWriter       datapath.ConfigWriter
+	NodeConfigNotifier *manager.NodeConfigNotifier
 
 	// Force map initialisation before loader. You should not use these otherwise.
 	// Some of the entries in this slice may be nil.
@@ -103,14 +103,14 @@ type Params struct {
 // newLoader returns a new loader.
 func newLoader(p Params) *loader {
 	return &loader{
-		logger:            p.Logger,
-		templateCache:     newObjectCache(p.Logger, p.ConfigWriter, filepath.Join(option.Config.StateDir, defaults.TemplatesDir)),
-		sysctl:            p.Sysctl,
-		hostDpInitialized: make(chan struct{}),
-		prefilter:         p.Prefilter,
-		compilationLock:   p.CompilationLock,
-		configWriter:      p.ConfigWriter,
-		nodeHandler:       p.NodeHandler,
+		logger:             p.Logger,
+		templateCache:      newObjectCache(p.Logger, p.ConfigWriter, filepath.Join(option.Config.StateDir, defaults.TemplatesDir)),
+		sysctl:             p.Sysctl,
+		hostDpInitialized:  make(chan struct{}),
+		prefilter:          p.Prefilter,
+		compilationLock:    p.CompilationLock,
+		configWriter:       p.ConfigWriter,
+		nodeConfigNotifier: p.NodeConfigNotifier,
 	}
 }
 
@@ -198,7 +198,7 @@ func netdevRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNodeCo
 		ipv4, ipv6 := bpfMasqAddrs(link.Attrs().Name, lnc)
 
 		if option.Config.EnableIPv4Masquerade && ipv4.IsValid() {
-			cfg.NATIPv4Masquerade = byteorder.NetIPv4ToHost32(ipv4.AsSlice())
+			cfg.NATIPv4Masquerade = ipv4.As4()
 		}
 		if option.Config.EnableIPv6Masquerade && ipv6.IsValid() {
 			cfg.NATIPv6Masquerade = ipv6.As16()
@@ -520,7 +520,7 @@ func attachNetworkDevices(logger *slog.Logger, ep datapath.Endpoint, lnc *datapa
 			return fmt.Errorf("interface %s ingress: %w", device, err)
 		}
 
-		if option.Config.AreDevicesRequired() {
+		if option.Config.AreDevicesRequired(lnc.KPRConfig) {
 			// Attach cil_to_netdev to egress.
 			if err := attachSKBProgram(logger, iface, netdevObj.ToNetdev, symbolToHostNetdevEp,
 				linkDir, netlink.HANDLE_MIN_EGRESS, option.Config.EnableTCX); err != nil {
@@ -557,11 +557,11 @@ func attachNetworkDevices(logger *slog.Logger, ep datapath.Endpoint, lnc *datapa
 func endpointRewrites(ep datapath.EndpointConfiguration, lnc *datapath.LocalNodeConfiguration) (*config.BPFLXC, map[string]string) {
 	cfg := config.NewBPFLXC(nodeConfig(lnc))
 
+	if ep.IPv4Address().IsValid() {
+		cfg.EndpointIPv4 = ep.IPv4Address().As4()
+	}
 	if ep.IPv6Address().IsValid() {
 		cfg.EndpointIPv6 = ep.IPv6Address().As16()
-	}
-	if ipv4 := ep.IPv4Address().AsSlice(); ipv4 != nil {
-		cfg.EndpointIPv4 = byteorder.NetIPv4ToHost32(net.IP(ipv4))
 	}
 
 	// Netkit devices can be L2-less, meaning they operate with a zero MAC
@@ -761,7 +761,7 @@ func replaceWireguardDatapath(ctx context.Context, logger *slog.Logger, lnc *dat
 
 	linkDir := bpffsDeviceLinksDir(bpf.CiliumPath(), device)
 	// Attach/detach cil_to_wireguard to/from egress.
-	if option.Config.NeedEgressOnWireGuardDevice() {
+	if option.Config.NeedEgressOnWireGuardDevice(lnc.KPRConfig) {
 		if err := attachSKBProgram(logger, device, obj.ToWireguard, symbolToWireguard,
 			linkDir, netlink.HANDLE_MIN_EGRESS, option.Config.EnableTCX); err != nil {
 			return fmt.Errorf("interface %s egress: %w", device, err)
@@ -776,7 +776,7 @@ func replaceWireguardDatapath(ctx context.Context, logger *slog.Logger, lnc *dat
 		}
 	}
 	// Attach/detach cil_from_wireguard to/from ingress.
-	if option.Config.NeedIngressOnWireGuardDevice() {
+	if option.Config.NeedIngressOnWireGuardDevice(lnc.KPRConfig) {
 		if err := attachSKBProgram(logger, device, obj.FromWireguard, symbolFromWireguard,
 			linkDir, netlink.HANDLE_MIN_INGRESS, option.Config.EnableTCX); err != nil {
 			return fmt.Errorf("interface %s ingress: %w", device, err)

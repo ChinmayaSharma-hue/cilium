@@ -19,7 +19,7 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/linux/safenetlink"
 	"github.com/cilium/cilium/pkg/datapath/loader"
 	"github.com/cilium/cilium/pkg/defaults"
-	"github.com/cilium/cilium/pkg/logging"
+	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/socketlb"
 )
@@ -378,7 +378,7 @@ func revertCNIBackup() error {
 }
 
 func removeSocketLBPrograms() error {
-	if err := socketlb.Disable(logging.DefaultSlogLogger); err != nil {
+	if err := socketlb.Disable(log); err != nil {
 		return fmt.Errorf("Failed to detach all socketlb bpf programs from %s: %w", defaults.DefaultCgroupRoot, err)
 	}
 	fmt.Println("removed all socketlb bpf programs")
@@ -394,7 +394,7 @@ func unmountCgroup() error {
 		return fmt.Errorf("%s is a file which is not a directory", cgroupRoot)
 	}
 
-	log.Info("Trying to unmount ", cgroupRoot)
+	log.Info("Trying to unmount path", logfields.Path, cgroupRoot)
 	if err := unix.Unmount(cgroupRoot, unix.MNT_FORCE); err != nil {
 		return fmt.Errorf("Failed to unmount %s: %w", cgroupRoot, err)
 	}

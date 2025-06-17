@@ -12,6 +12,7 @@ import (
 	"github.com/cilium/cilium/pkg/datapath/tunnel"
 	"github.com/cilium/cilium/pkg/defaults"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
+	"github.com/cilium/cilium/pkg/kpr"
 	"github.com/cilium/cilium/pkg/loadbalancer"
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/metrics/metric"
@@ -95,6 +96,7 @@ const (
 	networkChainingModeCalico      = "calico"
 	networkChainingModeFlannel     = "flannel"
 	networkChainingModeGenericVeth = "generic-veth"
+	networkChainingModePortmap     = "portmap"
 
 	networkIPv4      = "ipv4-only"
 	networkIPv6      = "ipv6-only"
@@ -146,6 +148,7 @@ var (
 		networkChainingModeCalico,
 		networkChainingModeFlannel,
 		networkChainingModeGenericVeth,
+		networkChainingModePortmap,
 	}
 
 	defaultIPAddressFamilies = []string{
@@ -941,10 +944,10 @@ func NewMetrics(withDefaults bool) Metrics {
 }
 
 type featureMetrics interface {
-	update(params enabledFeatures, config *option.DaemonConfig, lbConfig loadbalancer.Config)
+	update(params enabledFeatures, config *option.DaemonConfig, lbConfig loadbalancer.Config, kprCfg kpr.KPRConfig)
 }
 
-func (m Metrics) update(params enabledFeatures, config *option.DaemonConfig, lbConfig loadbalancer.Config) {
+func (m Metrics) update(params enabledFeatures, config *option.DaemonConfig, lbConfig loadbalancer.Config, kprCfg kpr.KPRConfig) {
 	networkMode := networkModeDirectRouting
 	if config.TunnelingEnabled() {
 		switch params.TunnelProtocol() {
@@ -1018,7 +1021,7 @@ func (m Metrics) update(params enabledFeatures, config *option.DaemonConfig, lbC
 		}
 	}
 
-	if config.KubeProxyReplacement == option.KubeProxyReplacementTrue {
+	if kprCfg.KubeProxyReplacement == option.KubeProxyReplacementTrue {
 		m.ACLBKubeProxyReplacementEnabled.Add(1)
 	}
 
@@ -1028,7 +1031,7 @@ func (m Metrics) update(params enabledFeatures, config *option.DaemonConfig, lbC
 		m.ACLBBGPEnabled.Add(1)
 	}
 
-	if config.EnableIPv4EgressGateway {
+	if config.EnableEgressGateway {
 		m.ACLBEgressGatewayEnabled.Add(1)
 	}
 

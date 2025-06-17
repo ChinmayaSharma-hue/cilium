@@ -21,7 +21,6 @@ cilium-agent [flags]
       --allow-localhost string                                    Policy when to allow local stack to reach local endpoints { auto | always | policy } (default "auto")
       --annotate-k8s-node                                         Annotate Kubernetes node
       --api-rate-limit string                                     API rate limiting configuration (example: --api-rate-limit endpoint-create=rate-limit:10/m,rate-burst:2)
-      --arping-refresh-period duration                            Period for remote node ARP entry refresh (set 0 to disable) (default 30s)
       --auto-create-cilium-node-resource                          Automatically create CiliumNode resource for own node on startup (default true)
       --auto-direct-node-routes                                   Enable automatic L2 routing between nodes
       --bgp-router-id-allocation-ip-pool string                   IP pool to allocate the BGP router-id from when the mode is 'ip-pool'
@@ -105,7 +104,6 @@ cilium-agent [flags]
       --egress-gateway-policy-map-max int                         Maximum number of entries in egress gateway policy map (default 16384)
       --egress-gateway-reconciliation-trigger-interval duration   Time between triggers of egress gateway state reconciliations (default 1s)
       --egress-masquerade-interfaces strings                      Limit iptables-based egress masquerading to interfaces selector
-      --egress-multi-home-ip-rule-compat                          Offset routing table IDs under ENI IPAM mode to avoid collisions with reserved table IDs. If false, the offset is performed (new scheme), otherwise, the old scheme stays in-place.
       --enable-active-connection-tracking                         Count open and active connections to services, grouped by zones defined in fixed-zone-mapping.
       --enable-auto-protect-node-port-range                       Append NodePort range to net.ipv4.ip_local_reserved_ports if it overlaps with ephemeral port range (net.ipv4.ip_local_port_range) (default true)
       --enable-bandwidth-manager                                  Enable BPF bandwidth manager
@@ -122,6 +120,7 @@ cilium-agent [flags]
       --enable-drift-checker                                      Enables support for config drift checker (default true)
       --enable-dynamic-config                                     Enables support for dynamic agent config (default true)
       --enable-dynamic-lifecycle-manager                          Enables support for dynamic lifecycle management
+      --enable-egress-gateway                                     Enable egress gateway
       --enable-encryption-strict-mode                             Enable encryption strict mode
       --enable-endpoint-health-checking                           Enable connectivity health checking between virtual endpoints (default true)
       --enable-endpoint-lockdown-on-policy-overflow               When an endpoint's policy map overflows, shutdown all (ingress and egress) network traffic for that endpoint.
@@ -135,11 +134,9 @@ cilium-agent [flags]
       --enable-host-firewall                                      Enable host network policies
       --enable-host-legacy-routing                                Enable the legacy host forwarding model which does not bypass upper stack in host namespace
       --enable-hubble                                             Enable hubble server
-      --enable-hubble-open-metrics                                Enable exporting hubble metrics in OpenMetrics format
-      --enable-hubble-recorder-api                                Enable the Hubble recorder API (default true)
+      --enable-hubble-open-metrics                                Enable exporting hubble metrics in OpenMetrics format.
       --enable-identity-mark                                      Enable setting identity mark for local traffic (default true)
       --enable-ingress-controller                                 Enables Envoy secret sync for Ingress controller related TLS secrets
-      --enable-internal-traffic-policy                            Enable internal traffic policy (default true)
       --enable-ip-masq-agent                                      Enable BPF ip-masq-agent
       --enable-ipip-termination                                   Enable plain IPIP/IP6IP6 termination
       --enable-ipsec                                              Enable IPsec support
@@ -147,7 +144,6 @@ cilium-agent [flags]
       --enable-ipsec-key-watcher                                  Enable watcher for IPsec key. If disabled, a restart of the agent will be necessary on key rotations. (default true)
       --enable-ipv4                                               Enable IPv4 support (default true)
       --enable-ipv4-big-tcp                                       Enable IPv4 BIG TCP option which increases device's maximum GRO/GSO limits for IPv4
-      --enable-ipv4-egress-gateway                                Enable egress gateway for IPv4
       --enable-ipv4-fragment-tracking                             Enable IPv4 fragments tracking for L4-based lookups (default true)
       --enable-ipv4-masquerade                                    Masquerade IPv4 traffic from endpoints leaving the host (default true)
       --enable-ipv6                                               Enable IPv6 support (default true)
@@ -157,9 +153,8 @@ cilium-agent [flags]
       --enable-ipv6-ndp                                           Enable IPv6 NDP support
       --enable-k8s                                                Enable the k8s clientset (default true)
       --enable-k8s-api-discovery                                  Enable discovery of Kubernetes API groups and resources with the discovery API
-      --enable-k8s-endpoint-slice                                 Enables k8s EndpointSlice feature in Cilium if the k8s cluster supports it (default true)
       --enable-l2-announcements                                   Enable L2 announcements
-      --enable-l2-neigh-discovery                                 Enables L2 neighbor discovery used by kube-proxy-replacement and IPsec (default true)
+      --enable-l2-neigh-discovery                                 Enables L2 neighbor discovery used by kube-proxy-replacement and IPsec
       --enable-l2-pod-announcements                               Enable announcing Pod IPs with Gratuitous ARP
       --enable-l7-proxy                                           Enable L7 proxy for L7 policy enforcement (default true)
       --enable-local-node-route                                   Enable installation of the route which points the allocation prefix of the local node (default true)
@@ -175,7 +170,6 @@ cilium-agent [flags]
       --enable-sctp                                               Enable SCTP support (beta)
       --enable-service-topology                                   Enable support for service topology aware hints
       --enable-standalone-dns-proxy                               Enables standalone DNS proxy
-      --enable-svc-source-range-check                             Enable check of service source ranges (currently, only for LoadBalancer) (default true)
       --enable-tcx                                                Attach endpoint programs using tcx if supported by the kernel (default true)
       --enable-tracing                                            Enable tracing while determining policy (debugging)
       --enable-unreachable-routes                                 Add unreachable routes on pod deletion
@@ -217,11 +211,11 @@ cilium-agent [flags]
       --http-retry-count uint                                     Number of retries performed after a forwarded request attempt fails (default 3)
       --http-retry-timeout uint                                   Time after which a forwarded but uncompleted request is retried (connection failures are retried immediately); defaults to 0 (never)
       --http-stream-idle-timeout uint                             Set Envoy the amount of time that the connection manager will allow a stream to exist with no upstream or downstream activity. Default 300s (default 300)
-      --hubble-disable-tls                                        Allow Hubble server to run on the given listen address without TLS.
+      --hubble-disable-tls                                        Allow Hubble server to run on the given listen address without TLS. (default true)
       --hubble-drop-events                                        Emit packet drop Events related to pods (alpha)
       --hubble-drop-events-interval duration                      Minimum time between emitting same events (default 2m0s)
       --hubble-drop-events-reasons strings                        Drop reasons to emit events for (default [auth_required,policy_denied])
-      --hubble-dynamic-metrics-config-path string                 Filepath with dynamic configuration of hubble metrics
+      --hubble-dynamic-metrics-config-path string                 Filepath with dynamic configuration of hubble metrics.
       --hubble-event-buffer-capacity int                          Capacity of Hubble events buffer. The provided value must be one less than an integer power of two and no larger than 65535 (ie: 1, 3, ..., 2047, 4095, ..., 65535) (default 4095)
       --hubble-event-queue-size int                               Buffer size of the channel to receive monitor events.
       --hubble-export-allowlist string                            Specify allowlist as JSON encoded FlowFilters to Hubble exporter.
@@ -242,8 +236,6 @@ cilium-agent [flags]
       --hubble-monitor-events strings                             Cilium monitor events for Hubble to observe: [drop debug capture trace policy-verdict recorder trace-sock l7 agent]. By default, Hubble observes all monitor events.
       --hubble-network-policy-correlation-enabled                 Enable network policy correlation of Hubble flows (default true)
       --hubble-prefer-ipv6                                        Prefer IPv6 addresses for announcing nodes when both address types are available.
-      --hubble-recorder-sink-queue-size int                       Queue size of each Hubble recorder sink (default 1024)
-      --hubble-recorder-storage-path string                       Directory in which pcap files created via the Hubble Recorder API are stored (default "/var/run/cilium/pcaps")
       --hubble-redact-enabled                                     Hubble redact sensitive information from flows
       --hubble-redact-http-headers-allow strings                  HTTP headers to keep visible in flows
       --hubble-redact-http-headers-deny strings                   HTTP headers to redact from flows
@@ -256,8 +248,11 @@ cilium-agent [flags]
       --hubble-tls-client-ca-files strings                        Paths to one or more public key files of client CA certificates to use for TLS with mutual authentication (mTLS). The files must contain PEM encoded data. When provided, this option effectively enables mTLS.
       --hubble-tls-key-file string                                Path to the private key file for the Hubble server. The file must contain PEM encoded data.
       --identity-allocation-mode string                           Method to use for identity allocation (default "kvstore")
+      --identity-allocation-sync-interval duration                Periodic synchronization interval of the allocated identities (default 5m0s)
+      --identity-allocation-timeout duration                      Timeout for identity allocation operations (default 2m0s)
       --identity-change-grace-period duration                     Time to wait before using new identity on endpoint identity change (default 5s)
       --identity-management-mode string                           Configure whether Cilium Identities are managed by cilium-agent, cilium-operator, or both (default "agent")
+      --identity-max-jitter duration                              Maximum jitter time to begin processing CiliumIdentity updates (default 30s)
       --identity-restore-grace-period duration                    Time to wait before releasing unused restored CIDR identities during agent restart (default 30s)
       --ignore-flags-drift-checker strings                        Ignores specified flags during drift checking
       --ingress-secrets-namespace string                          IngressSecretsNamespace is the namespace having tls secrets used by CEC, originating from Ingress controller
@@ -276,7 +271,7 @@ cilium-agent [flags]
       --ipv4-node string                                          IPv4 address of node (default "auto")
       --ipv4-pod-subnets strings                                  List of IPv4 pod subnets to preconfigure for encryption
       --ipv4-range string                                         Per-node IPv4 endpoint prefix, e.g. 10.16.0.0/16 (default "auto")
-      --ipv4-service-loopback-address string                      IPv4 address for service loopback SNAT (default "169.254.42.1")
+      --ipv4-service-loopback-address string                      IPv4 source address to use for SNAT when a Pod talks to itself over a Service. (default "169.254.42.1")
       --ipv4-service-range string                                 Kubernetes IPv4 services CIDR if not inside cluster prefix (default "auto")
       --ipv6-cluster-alloc-cidr string                            IPv6 /64 CIDR used to allocate per node endpoint /96 CIDR (default "f00d::/64")
       --ipv6-mcast-device string                                  Device that joins a Solicited-Node multicast group for IPv6
@@ -300,11 +295,9 @@ cilium-agent [flags]
       --kube-proxy-replacement string                             Enable kube-proxy replacement (default "false")
       --kube-proxy-replacement-healthz-bind-address string        The IP address with port for kube-proxy replacement health check server to serve on (set to '0.0.0.0:10256' for all IPv4 interfaces and '[::]:10256' for all IPv6 interfaces). Set empty to disable.
       --kvstore string                                            Key-value store type
-      --kvstore-connectivity-timeout duration                     Time after which an incomplete kvstore operation  is considered failed (default 2m0s)
       --kvstore-lease-ttl duration                                Time-to-live for the KVstore lease. (default 15m0s)
-      --kvstore-max-consecutive-quorum-errors uint                Max acceptable kvstore consecutive quorum errors before the agent assumes permanent failure (default 2)
-      --kvstore-opt map                                           Key-value store options e.g. etcd.address=127.0.0.1:4001
-      --kvstore-periodic-sync duration                            Periodic KVstore synchronization interval (default 5m0s)
+      --kvstore-max-consecutive-quorum-errors uint                Max acceptable kvstore consecutive quorum errors before recreating the etcd connection (default 2)
+      --kvstore-opt stringToString                                Key-value store options e.g. etcd.address=127.0.0.1:4001 (default [])
       --l2-announcements-lease-duration duration                  Duration of inactivity after which a new leader is selected (default 15s)
       --l2-announcements-renew-deadline duration                  Interval at which the leader renews a lease (default 5s)
       --l2-announcements-retry-period duration                    Timeout after a renew failure, before the next retry (default 2s)
@@ -345,6 +338,7 @@ cilium-agent [flags]
       --policy-accounting                                         Enable policy accounting (default true)
       --policy-audit-mode                                         Enable policy audit (non-drop) mode
       --policy-cidr-match-mode strings                            The entities that can be selected by CIDR policy. Supported values: 'nodes'
+      --policy-default-local-cluster                              Control whether policy rules assume by default the local cluster if not explicitly selected
       --policy-queue-size uint                                    Size of queue for policy-related events (default 100)
       --policy-secrets-namespace string                           PolicySecretsNamesapce is the namespace having secrets used in CNP and CCNP
       --policy-secrets-only-from-secrets-namespace                Configures the agent to only read policy Secrets from the policy-secrets-namespace
@@ -389,6 +383,7 @@ cilium-agent [flags]
       --tofqdns-max-deferred-connection-deletes int               Maximum number of IPs to retain for expired DNS lookups with still-active connections (default 10000)
       --tofqdns-min-ttl int                                       The minimum time, in seconds, to use DNS data for toFQDNs policies
       --tofqdns-pre-cache string                                  DNS cache data at this path is preloaded on agent startup
+      --tofqdns-preallocate-identities                            Preallocate identities for ToFQDN selectors. This reduces proxied DNS response latency. Disable if you have many ToFQDN selectors. (default true)
       --tofqdns-proxy-port int                                    Global port on which the in-agent DNS proxy should listen. Default 0 is a OS-assigned port.
       --tofqdns-proxy-response-max-delay duration                 The maximum time the DNS proxy holds an allowed DNS response before sending it along. Responses are sent as soon as the datapath is updated with the new IP information. (default 100ms)
       --trace-payloadlen int                                      Length of payload to capture when tracing (default 128)

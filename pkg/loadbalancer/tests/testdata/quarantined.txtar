@@ -1,10 +1,9 @@
-#! --enable-experimental-lb --lb-test-fault-probability=0.0
+#! --lb-test-fault-probability=0.0
 #
 # Test the infra for implementing active backend health checking and the restoration
 # of quarantined backends.
 
 hive/start
-db/initialized
 
 # Add our test service and backends.
 k8s/add service.yaml endpointslice.yaml

@@ -1,8 +1,7 @@
-#! --enable-experimental-lb --lb-test-fault-probability=0.0
+#! --lb-test-fault-probability=0.0
 
 # Start the test application
 hive start
-db/initialized
 
 # Set the local node IP address. This is used when filtering for local backends
 # when proxy delegation is set.

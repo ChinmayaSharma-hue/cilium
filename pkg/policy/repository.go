@@ -27,6 +27,7 @@ import (
 	"github.com/cilium/cilium/pkg/metrics"
 	"github.com/cilium/cilium/pkg/option"
 	"github.com/cilium/cilium/pkg/policy/api"
+	"github.com/cilium/cilium/pkg/policy/types"
 	"github.com/cilium/cilium/pkg/spanstat"
 )
 
@@ -89,7 +90,7 @@ type Repository struct {
 
 	certManager certificatemanager.CertificateManager
 
-	metricsManager    api.PolicyMetrics
+	metricsManager    types.PolicyMetrics
 	l7RulesTranslator envoypolicy.EnvoyL7RulesTranslator
 }
 
@@ -114,7 +115,7 @@ func NewPolicyRepository(
 	certManager certificatemanager.CertificateManager,
 	l7RulesTranslator envoypolicy.EnvoyL7RulesTranslator,
 	idmgr identitymanager.IDManager,
-	metricsManager api.PolicyMetrics,
+	metricsManager types.PolicyMetrics,
 ) *Repository {
 	selectorCache := NewSelectorCache(logger, initialIDs)
 	repo := &Repository{
@@ -171,10 +172,11 @@ func (p *Repository) addListLocked(rules api.Rules) (ruleSlice, uint64) {
 func (p *Repository) insert(r *rule) {
 	p.rules[r.key] = r
 	p.metricsManager.AddRule(r.Rule)
-	if _, ok := p.rulesByNamespace[r.key.resource.Namespace()]; !ok {
-		p.rulesByNamespace[r.key.resource.Namespace()] = sets.New[ruleKey]()
+	namespace := r.key.resource.Namespace()
+	if _, ok := p.rulesByNamespace[namespace]; !ok {
+		p.rulesByNamespace[namespace] = sets.New[ruleKey]()
 	}
-	p.rulesByNamespace[r.key.resource.Namespace()].Insert(r.key)
+	p.rulesByNamespace[namespace].Insert(r.key)
 	rid := r.key.resource
 	if len(rid) > 0 {
 		if p.rulesByResource[rid] == nil {
@@ -193,9 +195,10 @@ func (p *Repository) del(key ruleKey) {
 	}
 	p.metricsManager.DelRule(r.Rule)
 	delete(p.rules, key)
-	p.rulesByNamespace[key.resource.Namespace()].Delete(key)
-	if len(p.rulesByNamespace[key.resource.Namespace()]) == 0 {
-		delete(p.rulesByNamespace, key.resource.Namespace())
+	namespace := r.key.resource.Namespace()
+	p.rulesByNamespace[namespace].Delete(key)
+	if len(p.rulesByNamespace[namespace]) == 0 {
+		delete(p.rulesByNamespace, namespace)
 	}
 
 	rid := key.resource

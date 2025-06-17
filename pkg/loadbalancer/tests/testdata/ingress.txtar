@@ -1,4 +1,4 @@
-#! --enable-experimental-lb --lb-test-fault-probability=0.0
+#! --lb-test-fault-probability=0.0
 # Test the handling for the ingress service created by the operator.
 # The control-plane should ignore the dummy ingress endpoint (192.192.192.192:9999), but
 # still process the service.
@@ -7,13 +7,11 @@
 # Based on https://docs.cilium.io/en/stable/network/servicemesh/http/
 
 hive/start
-db/initialized
 
 # Add the service and endpoints
 k8s/add svc-ingress.yaml eps-ingress.yaml
 
 # Validate
-sleep 1s
 db/cmp services services.table
 db/cmp frontends frontends.table
 db/cmp backends backends.table

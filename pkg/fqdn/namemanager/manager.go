@@ -15,12 +15,16 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/cilium/hive/cell"
+	"github.com/cilium/hive/job"
+	"github.com/cilium/stream"
+
 	cmtypes "github.com/cilium/cilium/pkg/clustermesh/types"
-	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/fqdn"
 	"github.com/cilium/cilium/pkg/fqdn/dns"
 	"github.com/cilium/cilium/pkg/fqdn/matchpattern"
 	"github.com/cilium/cilium/pkg/fqdn/re"
+	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/ip"
 	"github.com/cilium/cilium/pkg/ipcache"
 	ipcacheTypes "github.com/cilium/cilium/pkg/ipcache/types"
@@ -56,11 +60,19 @@ type manager struct {
 	// Cleared by CompleteBoostrap
 	restoredPrefixes sets.Set[netip.Prefix]
 
-	manager *controller.Manager
-
 	// list of locks used as coordination points for name updates
 	// see LockName() for details.
 	nameLocks []*lock.Mutex
+
+	// selectorChanges is a stream of added and removed selectors
+	selectorChanges chan selectorChange
+	// Any pre-allocated identities for selectors -- used for possible release.
+	selectorIDs map[api.FQDNSelector][]identity.NumericIdentity
+}
+
+type selectorChange struct {
+	added bool
+	sel   api.FQDNSelector
 }
 
 // New creates an initialized NameManager.
@@ -75,13 +87,47 @@ func New(params ManagerParams) *manager {
 		logger:       params.Logger,
 		params:       params,
 		allSelectors: make(map[api.FQDNSelector]*regexp.Regexp),
+		selectorIDs:  make(map[api.FQDNSelector][]identity.NumericIdentity),
 		cache:        cache,
-		manager:      controller.NewManager(),
 		nameLocks:    make([]*lock.Mutex, params.Config.DNSProxyLockCount),
 	}
 
 	for i := range n.nameLocks {
 		n.nameLocks[i] = &lock.Mutex{}
+	}
+
+	// Break Hive import loop -- pass the NameManager back to the SelectorCache.
+	// (optional for tests)
+	if params.PolicyRepo != nil {
+		params.PolicyRepo.GetSelectorCache().SetLocalIdentityNotifier(n)
+	}
+
+	// Set up jobs:
+	// - gc
+	// - bootstrap
+	// - preallocator
+	// (optional for tests)
+	if params.JobGroup != nil {
+		params.JobGroup.Add(job.Timer(
+			dnsGCJobName,
+			n.doGC,
+			DNSGCJobInterval,
+		))
+
+		params.JobGroup.Add(job.OneShot(
+			"remove-restored-prefixes",
+			n.removeRestoredPrefixes,
+		))
+
+		// Start the asynchronous prefix allocator
+		// (optional for tests)
+		if params.Allocator != nil && params.Config.ToFQDNsPreAllocate {
+			n.selectorChanges = make(chan selectorChange, 2048)
+			params.JobGroup.Add(job.Observer(
+				"preallocate",
+				n.processSelectorChanges,
+				stream.FromChannel(n.selectorChanges)))
+		}
 	}
 
 	return n
@@ -117,6 +163,17 @@ func (n *manager) RegisterFQDNSelector(selector api.FQDNSelector) {
 		if metrics.FQDNSelectors.IsEnabled() {
 			metrics.FQDNSelectors.Set(float64(len(n.allSelectors)))
 		}
+		if n.selectorChanges != nil {
+			select {
+			case n.selectorChanges <- selectorChange{sel: selector, added: true}:
+			default:
+				// It is not a correctness issue if pre-allocation fails; it just
+				// means the first allocation will happen on DNS request. Even if a
+				// deletion is enqueued, we will have not recorded any allocated IDs
+				// so there is no risk of imbalanced references.
+				n.logger.Warn("failed to queue selector for preallocation")
+			}
+		}
 	}
 
 	// The newly added FQDN selector could match DNS Names in the cache. If
@@ -138,6 +195,14 @@ func (n *manager) UnregisterFQDNSelector(selector api.FQDNSelector) {
 	delete(n.allSelectors, selector)
 	if metrics.FQDNSelectors.IsEnabled() {
 		metrics.FQDNSelectors.Set(float64(len(n.allSelectors)))
+	}
+	if n.selectorChanges != nil {
+		select {
+		case n.selectorChanges <- selectorChange{sel: selector, added: false}:
+		default:
+			// No risk of correctness if this happens, but we will have leaked an identity.
+			n.logger.Warn("failed to queue selector identity release")
+		}
 	}
 
 	// Re-compute labels for affected names and IPs
@@ -168,7 +233,19 @@ func (n *manager) UpdateGenerateDNS(ctx context.Context, lookupTime time.Time, n
 	return c
 }
 
-func (n *manager) CompleteBootstrap() {
+// removeRestoredPrefixes is a one-shot job. It waits for
+// all endpoints to be regenerated, then removes restored ipcache state.
+func (n *manager) removeRestoredPrefixes(ctx context.Context, _ cell.Health) error {
+	epRestorer, err := n.params.RestorerPromise.Await(ctx)
+	if err != nil {
+		n.logger.Error("Failed to get endpoint restorer", logfields.Error, err)
+		return err
+	}
+	if err := epRestorer.WaitForEndpointRestore(ctx); err != nil {
+		n.logger.Error("Failed to wait for endpoints to regenerate", logfields.Error, err)
+		return err
+	}
+
 	n.Lock()
 	defer n.Unlock()
 
@@ -203,6 +280,7 @@ func (n *manager) CompleteBootstrap() {
 			)
 		}
 	}
+	return nil
 }
 
 // updateDNSIPs updates the IPs for a DNS name. It returns whether the name's IPs

@@ -15,6 +15,7 @@ include Makefile.defs
 SUBDIRS_CILIUM_CONTAINER := cilium-dbg daemon cilium-health bugtool tools/mount tools/sysctlfix plugins/cilium-cni
 SUBDIR_OPERATOR_CONTAINER := operator
 SUBDIR_RELAY_CONTAINER := hubble-relay
+SUBDIR_CLUSTERMESH_APISERVER_CONTAINER := clustermesh-apiserver
 
 ifdef LIBNETWORK_PLUGIN
 SUBDIRS_CILIUM_CONTAINER += plugins/cilium-docker
@@ -24,7 +25,7 @@ endif
 -include Makefile.override
 
 # List of subdirectories used for global "make build", "make clean", etc
-SUBDIRS := $(SUBDIRS_CILIUM_CONTAINER) $(SUBDIR_OPERATOR_CONTAINER) plugins tools $(SUBDIR_RELAY_CONTAINER) bpf clustermesh-apiserver
+SUBDIRS := $(SUBDIRS_CILIUM_CONTAINER) $(SUBDIR_OPERATOR_CONTAINER) plugins tools $(SUBDIR_RELAY_CONTAINER) bpf $(SUBDIR_CLUSTERMESH_APISERVER_CONTAINER) cilium-cli
 
 # Filter out any directories where the parent directory is also present, to avoid
 # building or cleaning a subdirectory twice.
@@ -76,6 +77,9 @@ build-container-operator-alibabacloud: ## Builds components required for a ciliu
 
 build-container-hubble-relay:
 	$(MAKE) $(SUBMAKEOPTS) -C $(SUBDIR_RELAY_CONTAINER) all
+
+build-container-clustermesh-apiserver: ## Builds components required for the clustermesh-apiserver container.
+	$(MAKE) $(SUBMAKEOPTS) -C $(SUBDIR_CLUSTERMESH_APISERVER_CONTAINER) all
 
 $(SUBDIRS): force ## Execute default make target(make all) for the provided subdirectory.
 	@ $(MAKE) $(SUBMAKEOPTS) -C $@ all
@@ -215,6 +219,9 @@ install-container-binary-hubble-relay:
 	$(QUIET)$(INSTALL) -m 0755 -d $(DESTDIR)$(BINDIR)
 	$(MAKE) $(SUBMAKEOPTS) -C $(SUBDIR_RELAY_CONTAINER) install-binary
 
+install-container-binary-clustermesh-apiserver: ## Install binaries for all components required for the clustermesh-apiserver container.
+	$(MAKE) $(SUBMAKEOPTS) -C $(SUBDIR_CLUSTERMESH_APISERVER_CONTAINER) install-binary
+
 # Workaround for not having git in the build environment
 # Touch the file only if needed
 GIT_VERSION: force
@@ -244,6 +251,7 @@ generate-api: api/v1/openapi.yaml ## Generate cilium-agent client, model and ser
 	-$(QUIET)$(SWAGGER) generate client -a restapi \
 		-t api/v1 \
 		-f api/v1/openapi.yaml \
+		-C api/v1/cilium-client.yml \
 		-r hack/spdx-copyright-header.txt
 	@# sort goimports automatically
 	-$(QUIET)$(GO) run golang.org/x/tools/cmd/goimports -w ./api/v1/client ./api/v1/models ./api/v1/server
@@ -261,6 +269,7 @@ generate-health-api: api/v1/health/openapi.yaml ## Generate cilium-health client
 		-t api/v1 \
 		-t api/v1/health/ \
 		-f api/v1/health/openapi.yaml \
+		-C api/v1/cilium-client.yml \
 		-r hack/spdx-copyright-header.txt
 	@# sort goimports automatically
 	-$(QUIET)$(GO) run golang.org/x/tools/cmd/goimports -w ./api/v1/health
@@ -278,6 +287,7 @@ generate-operator-api: api/v1/operator/openapi.yaml ## Generate cilium-operator 
 		-t api/v1 \
 		-t api/v1/operator/ \
 		-f api/v1/operator/openapi.yaml \
+		-C api/v1/cilium-client.yml \
 		-r hack/spdx-copyright-header.txt
 	@# sort goimports automatically
 	-$(QUIET)$(GO) run golang.org/x/tools/cmd/goimports -w ./api/v1/operator
@@ -295,6 +305,7 @@ generate-kvstoremesh-api: api/v1/kvstoremesh/openapi.yaml ## Generate kvstoremes
 		-t api/v1 \
 		-t api/v1/kvstoremesh/ \
 		-f api/v1/kvstoremesh/openapi.yaml \
+		-C api/v1/cilium-client.yml \
 		-r hack/spdx-copyright-header.txt
 	@# sort goimports automatically
 	-$(QUIET)$(GO) run golang.org/x/tools/cmd/goimports -w ./api/v1/kvstoremesh
@@ -356,9 +367,6 @@ check-k8s-clusterrole: ## Ensures there is no diff between preflight's clusterro
 	./contrib/scripts/check-preflight-clusterrole.sh
 
 ##@ Development
-vps: ## List all the running vagrant VMs.
-	VBoxManage list runningvms
-
 reload: ## Reload cilium-agent and cilium-docker systemd service after installing built binaries.
 	sudo systemctl stop cilium cilium-docker
 	sudo $(MAKE) install
@@ -391,9 +399,10 @@ lint: golangci-lint
 
 lint-fix: golangci-lint-fix
 
-logging-subsys-field: ## Validate logrus subsystem field for logs in Go source code.
-	@$(ECHO_CHECK) contrib/scripts/check-logging-subsys-field.sh
-	$(QUIET) contrib/scripts/check-logging-subsys-field.sh
+check-permissions: ## Check if files are not executable expect for allowlisted files. \
+	# This can happen especially when someone is developing on a Windows machine
+	find ./ -executable -type f | grep -Ev "\.git|\.sh|\.py" > ./executables.txt
+	diff <(sort ./executables.txt) <(sort ./contrib/executable_list.txt)
 
 check-microk8s: ## Validate if microk8s is ready to install cilium.
 	@$(ECHO_CHECK) microk8s is ready...
@@ -412,7 +421,7 @@ microk8s: check-microk8s ## Build cilium-dev docker image and import to microk8s
 	@echo "  DEPLOY image to microk8s ($(LOCAL_OPERATOR_IMAGE))"
 	$(QUIET)./contrib/scripts/microk8s-import.sh $(LOCAL_OPERATOR_IMAGE)
 
-precheck: logging-subsys-field ## Peform build precheck for the source code.
+precheck: ## Peform build precheck for the source code.
 ifeq ($(SKIP_K8S_CODE_GEN_CHECK),"false")
 	@$(ECHO_CHECK) contrib/scripts/check-k8s-code-gen.sh
 	$(QUIET) contrib/scripts/check-k8s-code-gen.sh
@@ -447,6 +456,8 @@ endif
 	$(QUIET) contrib/scripts/check-safenetlink.sh
 	@$(ECHO_CHECK) contrib/scripts/check-datapathconfig.sh
 	$(QUIET) contrib/scripts/check-datapathconfig.sh
+	@$(ECHO_CHECK) $(GO) run ./tools/slogloggercheck .
+	$(QUIET)$(GO) run ./tools/slogloggercheck .
 
 pprof-heap: ## Get Go pprof heap profile.
 	$(QUIET)$(GO) tool pprof http://localhost:6060/debug/pprof/heap

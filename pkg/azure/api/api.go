@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -19,13 +18,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v6"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v6"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork/v7"
 	"k8s.io/apimachinery/pkg/util/rand"
 
 	"github.com/cilium/cilium/pkg/api/helpers"
 	"github.com/cilium/cilium/pkg/azure/types"
 	ipamTypes "github.com/cilium/cilium/pkg/ipam/types"
-	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/spanstat"
 	"github.com/cilium/cilium/pkg/version"
 )
@@ -42,8 +40,6 @@ const (
 	interfacesListVirtualMachineScaleSetNetworkInterfaces   = "Interfaces.ListVirtualMachineScaleSetNetworkInterfaces"
 	interfacesListVirtualMachineScaleSetVMNetworkInterfaces = "Interfaces.ListVirtualMachineScaleSetVMNetworkInterfaces"
 )
-
-var subsysLogAttr = slog.String(logfields.LogSubsys, "azure-api")
 
 // Client represents an Azure API client
 type Client struct {

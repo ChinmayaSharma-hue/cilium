@@ -143,7 +143,7 @@
    * - :spelling:ignore:`authentication.mutual.spire.install.initImage`
      - init container image of SPIRE agent and server
      - object
-     - ``{"digest":"sha256:37f7b378a29ceb4c551b1b5582e27747b855bbfaa73fa11914fe0df028dc581f","override":null,"pullPolicy":"Always","repository":"docker.io/library/busybox","tag":"1.37.0","useDigest":true}``
+     - ``{"digest":"sha256:f85340bf132ae937d2c2a763b8335c9bab35d6e8293f70f606b9c6178d84f42b","override":null,"pullPolicy":"Always","repository":"docker.io/library/busybox","tag":"1.37.0","useDigest":true}``
    * - :spelling:ignore:`authentication.mutual.spire.install.namespace`
      - SPIRE namespace to install into
      - string
@@ -528,6 +528,10 @@
      - Configure cgroup root where cgroup2 filesystem is mounted on the host (see also: ``cgroup.autoMount``\ )
      - string
      - ``"/run/cilium/cgroupv2"``
+   * - :spelling:ignore:`ciliumEndpointSlice`
+     - CiliumEndpointSlice configuration options.
+     - object
+     - ``{"enabled":false,"rateLimits":[{"burst":20,"limit":10,"nodes":0},{"burst":100,"limit":50,"nodes":100}]}``
    * - :spelling:ignore:`ciliumEndpointSlice.enabled`
      - Enable Cilium EndpointSlice feature.
      - bool
@@ -536,10 +540,6 @@
      - List of rate limit options to be used for the CiliumEndpointSlice controller. Each object in the list must have the following fields: nodes: Count of nodes at which to apply the rate limit. limit: The sustained request rate in requests per second. The maximum rate that can be configured is 50. burst: The burst request rate in requests per second. The maximum burst that can be configured is 100.
      - list
      - ``[{"burst":20,"limit":10,"nodes":0},{"burst":100,"limit":50,"nodes":100}]``
-   * - :spelling:ignore:`ciliumEndpointSlice.sliceMode`
-     - The slicing mode to use for CiliumEndpointSlices. identity groups together CiliumEndpoints that share the same identity. fcfs groups together CiliumEndpoints in a first-come-first-serve basis, filling in the largest non-full slice first.
-     - string
-     - ``"identity"``
    * - :spelling:ignore:`cleanBpfState`
      - Clean all eBPF datapath state from the initContainer of the cilium-agent DaemonSet.  WARNING: Use with care!
      - bool
@@ -617,7 +617,7 @@
      - object
      - ``{"digest":"","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/clustermesh-apiserver-ci","tag":"latest","useDigest":false}``
    * - :spelling:ignore:`clustermesh.apiserver.kvstoremesh.enabled`
-     - Enable KVStoreMesh. KVStoreMesh caches the information retrieved from the remote clusters in the local etcd instance.
+     - Enable KVStoreMesh. KVStoreMesh caches the information retrieved from the remote clusters in the local etcd instance (deprecated - KVStoreMesh will always be enabled once the option is removed).
      - bool
      - ``true``
    * - :spelling:ignore:`clustermesh.apiserver.kvstoremesh.extraArgs`
@@ -932,6 +932,10 @@
      - The maximum number of clusters to support in a ClusterMesh. This value cannot be changed on running clusters, and all clusters in a ClusterMesh must be configured with the same value. Values > 255 will decrease the maximum allocatable cluster-local identities. Supported values are 255 and 511.
      - int
      - ``255``
+   * - :spelling:ignore:`clustermesh.policyDefaultLocalCluster`
+     - Control whether policy rules assume by default the local cluster if not explicitly selected
+     - bool
+     - ``false``
    * - :spelling:ignore:`clustermesh.useAPIServer`
      - Deploy clustermesh-apiserver for clustermesh
      - bool
@@ -956,8 +960,12 @@
      - Configure the path to the CNI configuration directory on the host.
      - string
      - ``"/etc/cni/net.d"``
+   * - :spelling:ignore:`cni.configMap`
+     - When defined, configMap will mount the provided value as ConfigMap and interpret the 'cni.configMapKey' value as CNI configuration file and write it when the agent starts up.
+     - string
+     - ``""``
    * - :spelling:ignore:`cni.configMapKey`
-     - Configure the key in the CNI ConfigMap to read the contents of the CNI configuration from.
+     - Configure the key in the CNI ConfigMap to read the contents of the CNI configuration from. For this to be effective, the 'cni.configMap' parameter must be specified too. Note that the 'cni.configMap' parameter is the name of the ConfigMap, while 'cni.configMapKey' is the name of the key in the ConfigMap data containing the actual configuration.
      - string
      - ``"cni-config"``
    * - :spelling:ignore:`cni.customConf`
@@ -1100,6 +1108,10 @@
      - The minimum time, in seconds, to use DNS data for toFQDNs policies. If the upstream DNS server returns a DNS record with a shorter TTL, Cilium overwrites the TTL with this value. Setting this value to zero means that Cilium will honor the TTLs returned by the upstream DNS server.
      - int
      - ``0``
+   * - :spelling:ignore:`dnsProxy.preAllocateIdentities`
+     - Pre-allocate ToFQDN identities. This reduces DNS proxy tail latency, at the potential cost of some unnecessary policymap entries. Disable this if you have a large (200+) number of unique ToFQDN selectors.
+     - bool
+     - ``true``
    * - :spelling:ignore:`dnsProxy.preCache`
      - DNS cache data at this path is preloaded on agent startup.
      - string
@@ -1124,10 +1136,6 @@
      - Time between triggers of egress gateway state reconciliations
      - string
      - ``"1s"``
-   * - :spelling:ignore:`enableCiliumEndpointSlice`
-     - Enable CiliumEndpointSlice feature (deprecated, please use ``ciliumEndpointSlice.enabled`` instead).
-     - bool
-     - ``false``
    * - :spelling:ignore:`enableCriticalPriorityClass`
      - Explicitly enable or disable priority class. .Capabilities.KubeVersion is unsettable in ``helm template`` calls, it depends on k8s libraries version that Helm was compiled against. This option allows to explicitly disable setting the priority class, which is useful for rendering charts for gke clusters in advance.
      - bool
@@ -1162,10 +1170,6 @@
      - ``false``
    * - :spelling:ignore:`enableNonDefaultDenyPolicies`
      - Enable Non-Default-Deny policies
-     - bool
-     - ``true``
-   * - :spelling:ignore:`enableRuntimeDeviceDetection`
-     - Enables experimental support for the detection of new and removed datapath devices. When devices change the eBPF datapath is reloaded and services updated. If "devices" is set then only those devices, or devices matching a wildcard will be considered.  This option has been deprecated and is a no-op.
      - bool
      - ``true``
    * - :spelling:ignore:`enableXTSocketFallback`
@@ -1367,7 +1371,7 @@
    * - :spelling:ignore:`envoy.image`
      - Envoy container image.
      - object
-     - ``{"digest":"sha256:5d442079aeb87ae1aaec431f7e9cb9b3da309149521e5465fe82965d96a8ef05","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.33.3-1747631391-2d12fe781e661e30cd2c817f377c35cc6c64500e","useDigest":true}``
+     - ``{"digest":"sha256:bea4f2294e795ab1642eba912673eabba3ed1fff5124ba2e307f396810b32780","override":null,"pullPolicy":"Always","repository":"quay.io/cilium/cilium-envoy","tag":"v1.33.3-1749716792-9cbedf28d3f4e8d7ff482744138ac3bdf65a868c","useDigest":true}``
    * - :spelling:ignore:`envoy.initialFetchTimeoutSeconds`
      - Time in seconds after which the initial fetch on an xDS stream is considered timed out
      - int
@@ -1584,10 +1588,6 @@
      - Enable use of TLS/SSL for connectivity to etcd.
      - bool
      - ``false``
-   * - :spelling:ignore:`externalIPs.enabled`
-     - Enable ExternalIPs service support.
-     - bool
-     - ``false``
    * - :spelling:ignore:`extraArgs`
      - Additional agent container arguments.
      - list
@@ -1698,10 +1698,6 @@
      - ``{"enabled":false}``
    * - :spelling:ignore:`hostFirewall.enabled`
      - Enables the enforcement of host policies in the eBPF datapath.
-     - bool
-     - ``false``
-   * - :spelling:ignore:`hostPort.enabled`
-     - Enable hostPort service support.
      - bool
      - ``false``
    * - :spelling:ignore:`hubble.annotations`
@@ -2675,11 +2671,7 @@
    * - :spelling:ignore:`l2NeighDiscovery.enabled`
      - Enable L2 neighbor discovery in the agent
      - bool
-     - ``true``
-   * - :spelling:ignore:`l2NeighDiscovery.refreshPeriod`
-     - Override the agent's default neighbor resolution refresh period.
-     - string
-     - ``"30s"``
+     - ``false``
    * - :spelling:ignore:`l2announcements`
      - Configure L2 announcements
      - object
@@ -2719,15 +2711,11 @@
    * - :spelling:ignore:`loadBalancer`
      - Configure service load balancing
      - object
-     - ``{"acceleration":"disabled","experimental":true,"l7":{"algorithm":"round_robin","backend":"disabled","ports":[]}}``
+     - ``{"acceleration":"disabled","l7":{"algorithm":"round_robin","backend":"disabled","ports":[]}}``
    * - :spelling:ignore:`loadBalancer.acceleration`
      - acceleration is the option to accelerate service handling via XDP Applicable values can be: disabled (do not use XDP), native (XDP BPF program is run directly out of the networking driver's early receive path), or best-effort (use native mode XDP acceleration on devices that support it).
      - string
      - ``"disabled"``
-   * - :spelling:ignore:`loadBalancer.experimental`
-     - experimental enables support for the experimental load-balancing control-plane.
-     - bool
-     - ``true``
    * - :spelling:ignore:`loadBalancer.l7`
      - L7 LoadBalancer
      - object

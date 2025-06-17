@@ -611,7 +611,8 @@
         "mapDynamicSizeRatio": {
           "type": [
             "null",
-            "number"
+            "number",
+            "string"
           ]
         },
         "masquerade": {
@@ -814,12 +815,6 @@
             ]
           },
           "type": "array"
-        },
-        "sliceMode": {
-          "enum": [
-            "identity",
-            "fcfs"
-          ]
         }
       },
       "type": "object"
@@ -1467,6 +1462,9 @@
         "maxConnectedClusters": {
           "type": "integer"
         },
+        "policyDefaultLocalCluster": {
+          "type": "boolean"
+        },
         "useAPIServer": {
           "type": "boolean"
         }
@@ -1494,6 +1492,9 @@
           "type": "string"
         },
         "confPath": {
+          "type": "string"
+        },
+        "configMap": {
           "type": "string"
         },
         "configMapKey": {
@@ -1678,6 +1679,9 @@
         "minTtl": {
           "type": "integer"
         },
+        "preAllocateIdentities": {
+          "type": "boolean"
+        },
         "preCache": {
           "type": "string"
         },
@@ -1703,9 +1707,6 @@
         }
       },
       "type": "object"
-    },
-    "enableCiliumEndpointSlice": {
-      "type": "boolean"
     },
     "enableCriticalPriorityClass": {
       "type": "boolean"
@@ -1735,9 +1736,6 @@
       "type": "boolean"
     },
     "enableNonDefaultDenyPolicies": {
-      "type": "boolean"
-    },
-    "enableRuntimeDeviceDetection": {
       "type": "boolean"
     },
     "enableXTSocketFallback": {
@@ -2433,14 +2431,6 @@
       },
       "type": "object"
     },
-    "externalIPs": {
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
     "extraArgs": {
       "items": {},
       "type": "array"
@@ -2557,14 +2547,6 @@
       "type": "integer"
     },
     "hostFirewall": {
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "hostPort": {
       "properties": {
         "enabled": {
           "type": "boolean"
@@ -4126,9 +4108,6 @@
       "properties": {
         "enabled": {
           "type": "boolean"
-        },
-        "refreshPeriod": {
-          "type": "string"
         }
       },
       "type": "object"
@@ -4173,9 +4152,6 @@
       "properties": {
         "acceleration": {
           "type": "string"
-        },
-        "experimental": {
-          "type": "boolean"
         },
         "l7": {
           "properties": {
