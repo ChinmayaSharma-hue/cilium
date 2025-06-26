@@ -6,7 +6,6 @@ package ctmap
 import (
 	"context"
 	"fmt"
-	"github.com/cilium/cilium/pkg/maps/nat"
 	"strings"
 	"unsafe"
 
@@ -530,11 +529,11 @@ type CtEntry struct {
 	Packets   uint64 `align:"packets"`
 	Bytes     uint64 `align:"bytes"`
 	// represents both IPv4 and IPv6 SNAT entries
-	NATInfo     nat.NatCTEntry6 `align:"$union0"`
-	TxFlagsSeen uint8           `align:"tx_flags_seen"`
-	RxFlagsSeen uint8           `align:"rx_flags_seen"`
-	Lifetime    uint32          `align:"lifetime"`
-	Flags       uint16          `align:"rx_closing"`
+	//NATInfo     CTSNatState `align:"snat_state"`
+	TxFlagsSeen uint8  `align:"tx_flags_seen"`
+	RxFlagsSeen uint8  `align:"rx_flags_seen"`
+	Lifetime    uint32 `align:"lifetime"`
+	Flags       uint16 `align:"rx_closing"`
 	// RevNAT is in network byte order
 	RevNAT           uint16 `align:"rev_nat_index"`
 	SourceSecurityID uint32 `align:"src_sec_id"`

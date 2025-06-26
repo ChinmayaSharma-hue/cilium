@@ -205,6 +205,7 @@ ct_lookup_fill_state(struct ct_state *state, const struct ct_entry *entry,
 		state->proxy_redirect = entry->proxy_redirect;
 		state->from_l7lb = entry->from_l7lb;
 		state->from_tunnel = entry->from_tunnel;
+		state->snat_state = entry->snat_state;
 	}
 }
 
@@ -1218,4 +1219,28 @@ ct_update_dsr(const void *map, const void *tuple, const bool dsr)
 		return;
 
 	entry->dsr_internal = dsr;
+}
+
+static __always_inline void
+ct_update_snat4(const void *map, const void *tuple, const __be32 to_saddr, const __be16 to_sport) {
+    struct ct_entry *entry;
+
+    entry = map_lookup_elem(map, tuple);
+    if (!entry)
+        return;
+
+    entry->snat_state.v4.to_saddr = to_saddr;
+    entry->snat_state.v4.to_sport = to_sport;
+    entry->snat_state.has_ip4 = 1;
+}
+
+static __always_inline void
+ct_delete_snat4(const void *map, const void *tuple) {
+    struct ct_entry *entry;
+
+    entry = map_lookup_elem(map, tuple);
+    if (!entry)
+        return;
+
+    entry->snat_state.has_ip4 = 0;
 }

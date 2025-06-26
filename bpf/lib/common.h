@@ -803,6 +803,23 @@ struct ipv6_ct_tuple {
 	__u8		flags;
 } __packed;
 
+struct ct_snat_state {
+    union {
+        struct {
+            __be32 to_saddr;
+            __be16 to_sport;
+        } v4;
+        struct {
+            union v6addr to_saddr;
+            __be16       to_sport;
+        } v6;
+    };
+    struct {
+        unsigned int has_ip4: 1;
+        unsigned int has_ip6: 1;
+    };
+};
+
 struct ipv4_ct_tuple {
 	/* Address fields are reversed, i.e.,
 	 * these field names are correct for reply direction traffic.
@@ -822,22 +839,7 @@ struct ct_entry {
     __u64 backend_id;
 	__u64 packets;
 	__u64 bytes;
-    union {
-        union {
-            struct lb4_reverse_nat nat_info;
-            struct {
-                __be32 to_saddr;
-                __be16 to_sport;
-            };
-        } ipv4_snat;
-        union {
-            struct lb6_reverse_nat nat_info;
-            struct {
-                union v6addr to_saddr;
-                __be16       to_sport;
-            };
-        } ipv6_snat;
-    } __packed;
+    struct ct_snat_state snat_state;
     /* *x_flags_seen represents the OR of all TCP flags seen for the
      * transmit/receive direction of this entry.
      */
@@ -1030,6 +1032,7 @@ struct ct_state {
 	      from_tunnel:1,	/* Connection is from tunnel */
 		  closing:1,
 	      reserved:7;
+    struct ct_snat_state snat_state;
 	__u32 src_sec_id;
 	__u32 backend_id;	/* Backend ID in lb4_backends */
 };
