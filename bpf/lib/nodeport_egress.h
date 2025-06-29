@@ -490,7 +490,7 @@ nodeport_rev_dnat_fwd_ipv4(struct __ctx_buff *ctx, bool *snat_done,
 		return ret;
 	}
 
-	nat_info = nodeport_rev_dnat_get_info_ipv4(ctx, &tuple);
+	nat_info = nodeport_rev_dnat_get_info_ipv4(ctx, &tuple, &ct_state);
 	if (!nat_info)
 		return CTX_ACT_OK;
 

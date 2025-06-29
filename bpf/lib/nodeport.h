@@ -2105,7 +2105,7 @@ create_ct:
 		ret = ct_create4(get_ct_map4(tuple), NULL, tuple, ctx,
 				 CT_EGRESS, &ct_state_new, ext_err);
 		if (!IS_ERR(ret))
-			ret = snat_v4_create_dsr(tuple, addr, port, ext_err);
+			ret = snat_v4_create_dsr(ctx, tuple, fraginfo, l4_off,addr, port, ext_err);
 
 		if (IS_ERR(ret))
 			return ret;
@@ -2130,11 +2130,16 @@ create_ct:
 
 static __always_inline struct lb4_reverse_nat *
 nodeport_rev_dnat_get_info_ipv4(struct __ctx_buff *ctx,
-				struct ipv4_ct_tuple *tuple)
+				struct ipv4_ct_tuple *tuple, struct ct_state *ct_state __maybe_unused)
 {
-	struct ipv4_nat_entry *dsr_entry __maybe_unused;
-	struct ipv4_ct_tuple dsr_tuple __maybe_unused;
 	__u16 rev_nat_index = 0;
+    fraginfo_t fraginfo __maybe_unused;
+    int l4_off __maybe_unused;
+    struct iphdr *ip4 __maybe_unused;
+    __u32 monitor __maybe_unused = 0;
+    void *data __maybe_unused, *data_end __maybe_unused;
+    int ret __maybe_unused;
+
 
 	if (!ct_has_nodeport_egress_entry4(get_ct_map4(tuple), tuple,
 					   &rev_nat_index, is_defined(ENABLE_DSR)))
@@ -2144,15 +2149,23 @@ nodeport_rev_dnat_get_info_ipv4(struct __ctx_buff *ctx,
 		return lb4_lookup_rev_nat_entry(ctx, rev_nat_index);
 
 #ifdef ENABLE_DSR
-	dsr_tuple = *tuple;
+    if (!revalidate_data(ctx, &data, &data_end, &ip4))
+        return NULL;
 
-	dsr_tuple.flags = NAT_DIR_EGRESS;
-	dsr_tuple.sport = tuple->dport;
-	dsr_tuple.dport = tuple->sport;
+    fraginfo = ipfrag_encode_ipv4(ip4);
+    l4_off = ETH_HLEN + ipv4_hdrlen(ip4);
 
-	dsr_entry = nodeport_dsr_lookup_v4_nat_entry(&dsr_tuple);
-	if (dsr_entry)
-		return &dsr_entry->nat_info;
+    ret = ct_lazy_lookup4(get_ct_map4(tuple), tuple, ctx, fraginfo,
+                  l4_off, CT_EGRESS, SCOPE_FORWARD,
+                  CT_ENTRY_DSR, ct_state, &monitor);
+
+    if (ret == CT_NEW) {
+        return NULL;
+    }
+    if (ct_state->snat_state.has_ip4) {
+        return &ct_state->snat_state.nat_info_v4;
+    }
+
 #endif
 
 	return NULL;
@@ -2825,11 +2838,12 @@ skip_service_lookup:
 						      &key.dport, dsr);
 			if (IS_ERR(ret))
 				return ret;
-			if (*dsr)
-				/* Packet continues on its way to local backend: */
-				return nodeport_dsr_ingress_ipv4(ctx, &tuple, fraginfo, l4_off,
-								 key.address, key.dport,
-								 ext_err);
+			if (*dsr) {
+                /* Packet continues on its way to local backend: */
+                return nodeport_dsr_ingress_ipv4(ctx, &tuple, fraginfo, l4_off,
+                                 key.address, key.dport,
+                                 ext_err);
+			}
 		}
 #endif
 #endif /* ENABLE_DSR */

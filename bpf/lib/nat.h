@@ -301,11 +301,10 @@ create_nat_entry:
         if (ext_err)
             *ext_err = (__s8)ret;
         ret = DROP_NAT_NO_MAPPING;
-    } else if (ret == CT_NEW) {
+    } else if (ret == CT_NEW)
         ret = DROP_NAT_NO_MAPPING;
-    } else {
+    else
         ct_update_snat4(get_ct_map4(&tuple_snat), &tuple_snat, ostate->to_saddr, ostate->to_sport);
-    }
 
 out:
 	/* We struggled to find a free port. Trigger GC in the agent to
@@ -479,9 +478,8 @@ snat_v4_rev_nat_handle_mapping(struct __ctx_buff *ctx,
                 return ret;
         }
 
-        if (!ct_state.snat_state.has_ip4) {
+        if (!ct_state.snat_state.has_ip4)
             ct_update_snat4(get_ct_map4(&otuple), &otuple, ostate.to_saddr, ostate.to_sport);
-        }
 	}
 
 	if (*state && (*state)->common.needs_ct) {
@@ -606,13 +604,13 @@ snat_v4_rev_nat_can_skip(const struct ipv4_nat_target *target, const struct ipv4
  * - on CT_NEW (ie. the tuple is reversed)
  */
 static __always_inline __maybe_unused int
-snat_v4_create_dsr(const struct ipv4_ct_tuple *tuple,
+snat_v4_create_dsr(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple, fraginfo_t fraginfo, int l4_off,
 		   __be32 to_saddr, __be16 to_sport, __s8 *ext_err)
 {
 	struct ipv4_ct_tuple tmp = *tuple;
 	struct ipv4_nat_entry state = {};
 	int ret;
-//    unsigned char *source_address, *source_port;
+    __u32 monitor = 0;
 
 	build_bug_on(sizeof(struct ipv4_nat_entry) > 64);
 
@@ -624,11 +622,19 @@ snat_v4_create_dsr(const struct ipv4_ct_tuple *tuple,
 	state.to_saddr = to_saddr;
 	state.to_sport = to_sport;
 
-//    source_address = (unsigned char*)&state.to_saddr;
-//    source_port = (unsigned char*)&state.to_sport;
-//    trace_printk("snat_v4_create_dsr: to source address: %d.%d", sizeof("snat_v4_create_dsr: to source address: %d.%d"), source_address[0], source_address[1]);
-//    trace_printk("%d.%d", sizeof("%d.%d"), source_address[2], source_address[3]);
-//    trace_printk("snat_v4_create_dsr: to source port: %d.%d", sizeof("snat_v4_create_dsr: to source port: %d.%d"), source_port[0], source_port[1]);
+    // CT entry lookup for tuple
+    ret = ct_lazy_lookup4(get_ct_map4(tuple), tuple, ctx, fraginfo,
+                  l4_off, CT_EGRESS, SCOPE_FORWARD,
+                  CT_ENTRY_DSR, NULL, &monitor);
+    if (ret < 0){
+        return ret;
+    }
+	if (ret == CT_NEW) {
+		*ext_err = (__s8)ret;
+		return DROP_NAT_NO_MAPPING;
+	} else{
+	    ct_update_snat4(get_ct_map4(tuple), tuple, to_saddr, to_sport);
+    }
 
 	ret = map_update_elem(&cilium_snat_v4_external, &tmp, &state, 0);
 	if (ret) {

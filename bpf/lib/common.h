@@ -805,6 +805,8 @@ struct ipv6_ct_tuple {
 
 struct ct_snat_state {
     union {
+        struct lb4_reverse_nat nat_info_v4;
+        struct lb6_reverse_nat nat_info_v6;
         struct {
             __be32 to_saddr;
             __be16 to_sport;
