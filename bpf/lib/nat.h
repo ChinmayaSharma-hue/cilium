@@ -217,18 +217,7 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx, void *map
 	__u32 retries;
 	int ret;
 	__u16 port;
-    void *data, *data_end;
-    fraginfo_t fraginfo;
-    int l4_off;
-    struct iphdr *ip4;
-    __u32 monitor = 0;
     struct ipv4_ct_tuple tuple_snat;
-
-    if (!revalidate_data(ctx, &data, &data_end, &ip4))
-        return DROP_INVALID;
-
-    fraginfo = ipfrag_encode_ipv4(ip4);
-    l4_off = ETH_HLEN + ipv4_hdrlen(ip4);
 
 	memset(&rstate, 0, sizeof(rstate));
 	memset(ostate, 0, sizeof(*ostate));
@@ -283,28 +272,14 @@ create_nat_entry:
 	ostate->common.created = rstate.common.created;
 
     /* Create the SNAT entry. We just created the RevSNAT entry. */
-    ret = __snat_create(map, otuple, ostate);
-    if (ret < 0) {
-        map_delete_elem(map, &rtuple); /* rollback */
-        if (ext_err)
-            *ext_err = (__s8)ret;
-        ret = DROP_NAT_NO_MAPPING;
-    }
-
     memcpy(&tuple_snat, otuple, sizeof(tuple_snat));
     ipv4_ct_tuple_swap_addrs(&tuple_snat);
-    ret = ct_lazy_lookup4(get_ct_map4(&tuple_snat), &tuple_snat, ctx,
-                          fraginfo, l4_off, CT_EGRESS, SCOPE_FORWARD,
-                          CT_ENTRY_ANY, NULL, &monitor);
+    ret = ct_update_snat4(get_ct_map4(&tuple_snat), &tuple_snat, ostate->to_saddr, ostate->to_sport);
     if (ret < 0) {
         map_delete_elem(map, &rtuple); /* rollback */
         if (ext_err)
             *ext_err = (__s8)ret;
-        ret = DROP_NAT_NO_MAPPING;
-    } else if (ret == CT_NEW)
-        ret = DROP_NAT_NO_MAPPING;
-    else
-        ct_update_snat4(get_ct_map4(&tuple_snat), &tuple_snat, ostate->to_saddr, ostate->to_sport);
+    }
 
 out:
 	/* We struggled to find a free port. Trigger GC in the agent to
@@ -397,11 +372,9 @@ snat_v4_nat_handle_mapping(struct __ctx_buff *ctx,
          * Otherwise, the packet will be erroneously SNATed with the stale
          * source IP.
          */
-        ret = __snat_delete(map, tuple);
+        ret = ct_delete_snat4(get_ct_map4(&tuple_snat), &tuple_snat);
         if (IS_ERR(ret))
             return ret;
-
-        ct_delete_snat4(get_ct_map4(&tuple_snat), &tuple_snat);
 
         *state = __snat_lookup(map, &rtuple);
         if (*state)

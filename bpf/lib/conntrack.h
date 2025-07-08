@@ -1221,26 +1221,30 @@ ct_update_dsr(const void *map, const void *tuple, const bool dsr)
 	entry->dsr_internal = dsr;
 }
 
-static __always_inline void
+static __always_inline int
 ct_update_snat4(const void *map, const void *tuple, const __be32 to_saddr, const __be16 to_sport) {
     struct ct_entry *entry;
 
     entry = map_lookup_elem(map, tuple);
     if (!entry)
-        return;
+        return DROP_NAT_NO_MAPPING;
 
     entry->snat_state.v4.to_saddr = to_saddr;
     entry->snat_state.v4.to_sport = to_sport;
     entry->snat_state.has_ip4 = 1;
+
+    return 0;
 }
 
-static __always_inline void
+static __always_inline int
 ct_delete_snat4(const void *map, const void *tuple) {
     struct ct_entry *entry;
 
     entry = map_lookup_elem(map, tuple);
     if (!entry)
-        return;
+        return DROP_NAT_NO_MAPPING;
 
     entry->snat_state.has_ip4 = 0;
+
+    return 0;
 }

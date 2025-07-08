@@ -6,6 +6,7 @@ package ctmap
 import (
 	"context"
 	"fmt"
+	"github.com/cilium/cilium/pkg/maps/nat"
 	"strings"
 	"unsafe"
 
@@ -529,16 +530,22 @@ type CtEntry struct {
 	Packets   uint64 `align:"packets"`
 	Bytes     uint64 `align:"bytes"`
 	// represents both IPv4 and IPv6 SNAT entries
-	//NATInfo     CTSNatState `align:"snat_state"`
-	TxFlagsSeen uint8  `align:"tx_flags_seen"`
-	RxFlagsSeen uint8  `align:"rx_flags_seen"`
-	Lifetime    uint32 `align:"lifetime"`
-	Flags       uint16 `align:"rx_closing"`
+	NATInfo     CTSnatState `align:"snat_state"`
+	Lifetime    uint32      `align:"lifetime"`
+	TxFlagsSeen uint8       `align:"tx_flags_seen"`
+	RxFlagsSeen uint8       `align:"rx_flags_seen"`
+	Flags       uint16      `align:"rx_closing"`
 	// RevNAT is in network byte order
-	RevNAT           uint16 `align:"rev_nat_index"`
-	SourceSecurityID uint32 `align:"src_sec_id"`
-	LastTxReport     uint32 `align:"last_tx_report"`
-	LastRxReport     uint32 `align:"last_rx_report"`
+	SourceSecurityID uint32   `align:"src_sec_id"`
+	LastTxReport     uint32   `align:"last_tx_report"`
+	LastRxReport     uint32   `align:"last_rx_report"`
+	RevNAT           uint16   `align:"rev_nat_index"`
+	Pad              [6]uint8 `align:"pad"`
+}
+
+type CTSnatState struct {
+	NatCTEntry nat.NatCTEntry6 `align:"$union0"`
+	Flags      uint16          `align:"$struct0"`
 }
 
 const SizeofCtEntry = int(unsafe.Sizeof(CtEntry{}))

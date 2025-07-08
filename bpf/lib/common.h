@@ -815,11 +815,11 @@ struct ct_snat_state {
             union v6addr to_saddr;
             __be16       to_sport;
         } v6;
-    };
+    } __packed;
     struct {
         unsigned int has_ip4: 1;
         unsigned int has_ip6: 1;
-    };
+    } __packed;
 };
 
 struct ipv4_ct_tuple {
@@ -845,9 +845,9 @@ struct ct_entry {
     /* *x_flags_seen represents the OR of all TCP flags seen for the
      * transmit/receive direction of this entry.
      */
+    __u32 lifetime;
     __u8  tx_flags_seen;
     __u8  rx_flags_seen;
-	__u32 lifetime;
 	__u16 rx_closing:1,
 	      tx_closing:1,
 	      reserved1:1,	/* unused since v1.12 */
@@ -860,8 +860,6 @@ struct ct_entry {
 	      reserved2:1,	/* unused since v1.14 */
 	      from_tunnel:1,	/* Connection is over tunnel */
 	      reserved3:5;
-	__u16 rev_nat_index;
-
 
 	__u32 src_sec_id; /* Used from userspace proxies, do not change offset! */
 
@@ -870,6 +868,9 @@ struct ct_entry {
 	 */
 	__u32 last_tx_report;
 	__u32 last_rx_report;
+    __u16 rev_nat_index;
+    __u8 pad[6];
+
 };
 
 #define IPPROTO_ANY	0	/* For service lookup with ANY L4 protocol */
