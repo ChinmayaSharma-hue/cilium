@@ -192,7 +192,7 @@ setup(struct __ctx_buff *ctx, bool v4, bool flag_skip_tunnel)
 
 		void *map = get_cluster_snat_map_v4(0);
 
-		struct ipv4_nat_entry state;
+		struct ct_nat_info state;
 
 		snat_v4_new_mapping(ctx, map, &otuple, &state, &target, true, NULL);
 

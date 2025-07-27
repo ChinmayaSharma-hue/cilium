@@ -210,6 +210,8 @@ ct_lookup_fill_state(struct ct_state *state, const struct ct_entry *entry,
 		state->proxy_redirect = entry->proxy_redirect;
 		state->from_l7lb = entry->from_l7lb;
 		state->from_tunnel = entry->from_tunnel;
+		state->has_nat = entry->has_nat;
+		state->nat_info = entry->nat_info;
 	}
 }
 
@@ -931,6 +933,29 @@ out:
  * ICMP types to ct_lazy_lookup4.
  */
 static __always_inline int
+ct_lookup_nat4(const void *map, struct ipv4_ct_tuple *tuple, struct __ctx_buff *ctx,
+        fraginfo_t fraginfo, int l4_off, enum ct_dir dir, enum ct_scope scope,
+        __u32 ct_entry_types, struct ct_nat_info *ct_nat_info, __u32 *monitor, bool *has_nat)
+{
+    int ret;
+    struct ct_state ct_state = {};
+
+    tuple->flags = ct_lookup_select_tuple_type(dir, scope);
+    ret = __ct_lookup4(map, tuple, ctx, fraginfo, l4_off, dir,
+                    scope, ct_entry_types, &ct_state, monitor);
+    if (ret < 0)
+        return ret;
+
+    *has_nat = ct_state.has_nat;
+
+    if (ct_nat_info)
+        memcpy(ct_nat_info, &ct_state.nat_info, sizeof(struct ct_nat_info));
+
+    return ret;
+}
+
+
+static __always_inline int
 ct_lazy_lookup4(const void *map, struct ipv4_ct_tuple *tuple, struct __ctx_buff *ctx,
 		fraginfo_t fraginfo, int l4_off, enum ct_dir dir, enum ct_scope scope,
 		__u32 ct_entry_types, struct ct_state *ct_state, __u32 *monitor)
@@ -1223,6 +1248,36 @@ ct_update_svc_entry(const void *map, const void *tuple,
 
 	entry->backend_id = backend_id;
 	entry->rev_nat_index = rev_nat_index;
+}
+
+static __always_inline int
+ct_update_nat_entry(const void *map, const void *tuple, struct ct_nat_info *nat_info)
+{
+	struct ct_entry *entry;
+
+	entry = map_lookup_elem(map, tuple);
+	if (!entry)
+		return DROP_INVALID;
+
+    *(__be32 *)entry->nat_info.addr = *(__be32 *)nat_info->addr;
+    entry->nat_info.port = nat_info->port;
+    entry->has_nat = 1;
+
+    return 0;
+}
+
+static __always_inline int
+ct_delete_nat_entry(const void *map, const void *tuple)
+{
+    struct ct_entry *entry;
+
+    entry = map_lookup_elem(map, tuple);
+    if (!entry)
+        return DROP_INVALID;
+
+    memset((void *)&entry->nat_info, 0, sizeof(struct ct_nat_info));
+    entry->has_nat = 0;
+    return 0;
 }
 
 static __always_inline void

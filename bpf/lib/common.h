@@ -778,26 +778,31 @@ struct ipv4_ct_tuple {
 	__u8		flags;
 } __packed;
 
+struct ct_nat_info {
+	__u8 addr[16];
+	__be16 port;
+} __packed;
+
 struct ct_entry {
-	__u64 reserved0;	/* unused since v1.16 */
 	__u64 backend_id;
 	__u64 packets;
 	__u64 bytes;
+	struct ct_nat_info nat_info;
+    __u16 rx_closing:1,
+          tx_closing:1,
+          reserved1:1,	/* unused since v1.12 */
+          lb_loopback:1,
+          seen_non_syn:1,
+          node_port:1,
+          proxy_redirect:1,	/* Connection is redirected to a proxy */
+          dsr_internal:1,	/* DSR is k8s service related, cluster internal */
+          from_l7lb:1,	/* Connection is originated from an L7 LB proxy */
+          reserved2:1,	/* unused since v1.14 */
+          from_tunnel:1,	/* Connection is over tunnel */
+          has_nat:1,
+          reserved3:4;
 	__u32 lifetime;
-	__u16 rx_closing:1,
-	      tx_closing:1,
-	      reserved1:1,	/* unused since v1.12 */
-	      lb_loopback:1,
-	      seen_non_syn:1,
-	      node_port:1,
-	      proxy_redirect:1,	/* Connection is redirected to a proxy */
-	      dsr_internal:1,	/* DSR is k8s service related, cluster internal */
-	      from_l7lb:1,	/* Connection is originated from an L7 LB proxy */
-	      reserved2:1,	/* unused since v1.14 */
-	      from_tunnel:1,	/* Connection is over tunnel */
-	      reserved3:5;
 	__u16 rev_nat_index;
-	__u16 reserved4;	/* unused since v1.18 */
 
 	/* *x_flags_seen represents the OR of all TCP flags seen for the
 	 * transmit/receive direction of this entry.
@@ -1011,9 +1016,11 @@ struct ct_state {
 	      reserved1:1,	/* Was auth_required, not used in production anywhere */
 	      from_tunnel:1,	/* Connection is from tunnel */
 		  closing:1,
-	      reserved:7;
+		  has_nat:1,
+	      reserved:6;
 	__u32 src_sec_id;
-	__u32 backend_id;	/* Backend ID in lb4_backends */
+    __u32 backend_id;	/* Backend ID in lb4_backends */
+	struct ct_nat_info nat_info;
 };
 
 static __always_inline bool ct_state_is_from_l7lb(const struct ct_state *ct_state __maybe_unused)

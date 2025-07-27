@@ -525,20 +525,24 @@ func (k *CtKey6Global) GetTupleKey() tuple.TupleKey {
 
 // CtEntry represents an entry in the connection tracking table.
 type CtEntry struct {
-	Reserved0 uint64 `align:"reserved0"`
-	BackendID uint64 `align:"backend_id"`
-	Packets   uint64 `align:"packets"`
-	Bytes     uint64 `align:"bytes"`
-	Lifetime  uint32 `align:"lifetime"`
-	Flags     uint16 `align:"rx_closing"`
+	BackendID uint64    `align:"backend_id"`
+	Packets   uint64    `align:"packets"`
+	Bytes     uint64    `align:"bytes"`
+	NatInfo   CtNatInfo `align:"nat_info"`
+	Flags     uint16    `align:"rx_closing"`
+	Lifetime  uint32    `align:"lifetime"`
 	// RevNAT is in network byte order
 	RevNAT           uint16 `align:"rev_nat_index"`
-	Reserved4        uint16 `align:"reserved4"`
 	TxFlagsSeen      uint8  `align:"tx_flags_seen"`
 	RxFlagsSeen      uint8  `align:"rx_flags_seen"`
 	SourceSecurityID uint32 `align:"src_sec_id"`
 	LastTxReport     uint32 `align:"last_tx_report"`
 	LastRxReport     uint32 `align:"last_rx_report"`
+}
+
+type CtNatInfo struct {
+	Address [16]uint8 `align:"addr"`
+	Port    uint16    `align:"port"`
 }
 
 const SizeofCtEntry = int(unsafe.Sizeof(CtEntry{}))

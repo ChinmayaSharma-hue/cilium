@@ -194,20 +194,20 @@ struct ipv4_nat_entry *snat_v4_lookup(const struct ipv4_ct_tuple *tuple)
 
 static __always_inline void
 set_v4_rtuple(const struct ipv4_ct_tuple *otuple,
-	      const struct ipv4_nat_entry *ostate,
+	      const struct ct_nat_info *ostate,
 	      struct ipv4_ct_tuple *rtuple)
 {
 	rtuple->flags = TUPLE_F_IN;
 	rtuple->nexthdr = otuple->nexthdr;
 	rtuple->saddr = otuple->daddr;
-	rtuple->daddr = ostate->to_saddr;
+	rtuple->daddr = *(__be32 *)ostate->addr;
 	rtuple->sport = otuple->dport;
-	rtuple->dport = ostate->to_sport;
+	rtuple->dport = ostate->port;
 }
 
 static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx, void *map,
 					       struct ipv4_ct_tuple *otuple,
-					       struct ipv4_nat_entry *ostate,
+					       struct ct_nat_info *ostate,
 					       const struct ipv4_nat_target *target,
 					       bool needs_ct, __s8 *ext_err)
 {
@@ -217,6 +217,7 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx, void *map
 	__u32 retries;
 	int ret;
 	__u16 port;
+    struct ipv4_ct_tuple tuple_snat;
 
 	memset(&rstate, 0, sizeof(rstate));
 	memset(ostate, 0, sizeof(*ostate));
@@ -224,7 +225,7 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx, void *map
 	rstate.to_daddr = otuple->saddr;
 	rstate.to_dport = otuple->sport;
 
-	ostate->to_saddr = target->addr;
+	*(__be32 *)ostate->addr = target->addr;
 	/* .to_sport is selected below */
 
 	/* This tuple matches reply traffic for the SNATed connection: */
@@ -235,7 +236,6 @@ static __always_inline int snat_v4_new_mapping(struct __ctx_buff *ctx, void *map
 				    target->max_port,
 				    bpf_ntohs(otuple->sport));
 
-	ostate->common.needs_ct = needs_ct;
 	rstate.common.needs_ct = needs_ct;
 	rstate.common.created = bpf_mono_now();
 
@@ -266,18 +266,18 @@ create_nat_entry:
 	if (retries_hist)
 		++*retries_hist;
 
-	ostate->to_sport = rtuple.dport;
-	ostate->common.created = rstate.common.created;
+	ostate->port = rtuple.dport;
 
 	/* Create the SNAT entry. We just created the RevSNAT entry. */
-	ret = __snat_create(map, otuple, ostate);
+    memcpy(&tuple_snat, otuple, sizeof(tuple_snat));
+    ipv4_ct_tuple_swap_addrs(&tuple_snat);
+    ret = ct_update_nat_entry(get_ct_map4(&tuple_snat), &tuple_snat, ostate);
 	if (ret < 0) {
 		map_delete_elem(map, &rtuple); /* rollback */
 		if (ext_err)
 			*ext_err = (__s8)ret;
 		ret = DROP_NAT_NO_MAPPING;
 	}
-
 out:
 	/* We struggled to find a free port. Trigger GC in the agent to
 	 * free up any ports that are held by expired connections.
@@ -292,8 +292,7 @@ static __always_inline int
 snat_v4_nat_handle_mapping(struct __ctx_buff *ctx,
 			   struct ipv4_ct_tuple *tuple,
 			   fraginfo_t fraginfo,
-			   struct ipv4_nat_entry **state,
-			   struct ipv4_nat_entry *tmp,
+			   struct ct_nat_info *state,
 			   __u32 off,
 			   const struct ipv4_nat_target *target,
 			   struct trace_ctx *trace,
@@ -301,44 +300,37 @@ snat_v4_nat_handle_mapping(struct __ctx_buff *ctx,
 {
 	bool needs_ct = target->needs_ct;
 	void *map;
+	int ret;
+	bool has_nat = false;
+    struct ipv4_ct_tuple tuple_snat;
 
 	map = get_cluster_snat_map_v4(target->cluster_id);
 	if (!map)
 		return DROP_SNAT_NO_MAP_FOUND;
 
-	*state = __snat_lookup(map, tuple);
 
-	if (needs_ct) {
-		struct ipv4_ct_tuple tuple_snat;
-		int ret;
+    memcpy(&tuple_snat, tuple, sizeof(tuple_snat));
+    ipv4_ct_tuple_swap_addrs(&tuple_snat);
+	ret = ct_lookup_nat4(get_ct_map4(&tuple_snat), &tuple_snat, ctx,
+                         fraginfo, off, CT_EGRESS, SCOPE_FORWARD,
+                         CT_ENTRY_ANY, state, &trace->monitor, &has_nat);
+    if (ret < 0)
+        return ret;
+    trace->reason = (enum trace_reason)ret;
+    if (ret == CT_NEW) {
+        ret = ct_create4(get_ct_map4(&tuple_snat), NULL,
+                 &tuple_snat, ctx, CT_EGRESS,
+                 NULL, ext_err);
+        if (IS_ERR(ret))
+            return ret;
+    }
 
-		memcpy(&tuple_snat, tuple, sizeof(tuple_snat));
-		/* Lookup with SCOPE_FORWARD. Ports are already in correct layout: */
-		ipv4_ct_tuple_swap_addrs(&tuple_snat);
-
-		ret = ct_lazy_lookup4(get_ct_map4(&tuple_snat), &tuple_snat, ctx,
-				      fraginfo, off, CT_EGRESS, SCOPE_FORWARD,
-				      CT_ENTRY_ANY, NULL, &trace->monitor);
-		if (ret < 0)
-			return ret;
-
-		trace->reason = (enum trace_reason)ret;
-		if (ret == CT_NEW) {
-			ret = ct_create4(get_ct_map4(&tuple_snat), NULL,
-					 &tuple_snat, ctx, CT_EGRESS,
-					 NULL, ext_err);
-			if (IS_ERR(ret))
-				return ret;
-		}
-	}
-
-	if (*state) {
-		int ret;
+	if (has_nat) {
 		struct ipv4_ct_tuple rtuple = {};
+		struct ipv4_nat_entry *rev_snat_entry;
 
-		set_v4_rtuple(tuple, *state, &rtuple);
-		if (target->addr == (*state)->to_saddr &&
-		    needs_ct == (*state)->common.needs_ct) {
+		set_v4_rtuple(tuple, state, &rtuple);
+		if (target->addr == *(__be32*)state->addr) {
 			/* Check for the reverse SNAT entry. If it is missing (e.g. due to LRU
 			 * eviction), it must be restored before returning.
 			 */
@@ -359,7 +351,6 @@ snat_v4_nat_handle_mapping(struct __ctx_buff *ctx,
 					return DROP_NAT_NO_MAPPING;
 				}
 			}
-			barrier_data(*state);
 			return 0;
 		}
 
@@ -371,16 +362,15 @@ snat_v4_nat_handle_mapping(struct __ctx_buff *ctx,
 		if (IS_ERR(ret))
 			return ret;
 
-		*state = __snat_lookup(map, &rtuple);
-		if (*state)
+		rev_snat_entry = __snat_lookup(map, &rtuple);
+		if (rev_snat_entry)
 			/* snat_v4_new_mapping will create new RevSNAT entry even if deleting
 			 * the old RevSNAT entry fails. We would leave it behind though.
 			 */
 			__snat_delete(map, &rtuple);
 	}
 
-	*state = tmp;
-	return snat_v4_new_mapping(ctx, map, tuple, tmp, target, needs_ct, ext_err);
+	return snat_v4_new_mapping(ctx, map, tuple, state, target, needs_ct, ext_err);
 }
 
 static __always_inline int
@@ -853,22 +843,22 @@ __snat_v4_nat(struct __ctx_buff *ctx, struct ipv4_ct_tuple *tuple, fraginfo_t fr
 	      int l4_off, bool update_tuple, const struct ipv4_nat_target *target,
 	      __u16 port_off, struct trace_ctx *trace, __s8 *ext_err)
 {
-	struct ipv4_nat_entry *state, tmp;
+	struct ct_nat_info state = {};
 	int ret;
 
-	ret = snat_v4_nat_handle_mapping(ctx, tuple, fraginfo, &state, &tmp,
+	ret = snat_v4_nat_handle_mapping(ctx, tuple, fraginfo, &state,
 					 l4_off, target, trace, ext_err);
 	if (ret < 0)
 		return ret;
 
 	ret = snat_v4_rewrite_headers(ctx, tuple->nexthdr, ETH_HLEN,
 				      ipfrag_has_l4_header(fraginfo), l4_off,
-				      tuple->saddr, state->to_saddr, IPV4_SADDR_OFF,
-				      tuple->sport, state->to_sport, port_off);
+				      tuple->saddr, *(__be32*)state.addr, IPV4_SADDR_OFF,
+				      tuple->sport, state.port, port_off);
 
 	if (update_tuple) {
-		tuple->saddr = state->to_saddr;
-		tuple->sport = state->to_sport;
+		tuple->saddr = *(__be32*)state.addr;
+		tuple->sport = state.port;
 	}
 
 	return ret;
